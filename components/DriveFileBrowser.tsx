@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { DriveFile } from '../types';
 import { fetchDriveFiles, formatFileSize, getFileIcon } from '../services/driveService';
 import { 
   FolderOpen, FileText, FileSpreadsheet, File as FileIcon, 
-  Image as ImageIcon, Download, Eye, RefreshCw, ExternalLink, AlertTriangle 
+  Image as ImageIcon, Download, Eye, RefreshCw, ExternalLink, AlertTriangle, Search 
 } from 'lucide-react';
 
 interface DriveFileBrowserProps {
@@ -14,6 +15,7 @@ interface DriveFileBrowserProps {
 
 export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, title, description }) => {
   const [files, setFiles] = useState<DriveFile[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,13 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
   useEffect(() => {
     loadFiles();
   }, [folderId]);
+
+  // Filter files based on search term
+  const filteredFiles = useMemo(() => {
+    if (!searchTerm) return files;
+    const lowerTerm = searchTerm.toLowerCase();
+    return files.filter(file => file.name.toLowerCase().includes(lowerTerm));
+  }, [files, searchTerm]);
 
   const renderIcon = (mimeType: string) => {
     const type = getFileIcon(mimeType);
@@ -57,35 +66,56 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
     <div className="h-full flex flex-col bg-slate-50 p-4 md:p-6 overflow-hidden">
       {/* Header */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 shrink-0">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
               <FolderOpen className="w-8 h-8" />
             </div>
             <div>
               <h2 className="text-xl font-bold text-slate-800">{title}</h2>
-              <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+              <div className="flex items-center gap-2">
+                 <p className="text-sm text-slate-500 mt-0.5">{description}</p>
+                 {!isLoading && files.length > 0 && (
+                    <span className="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                      {files.length} file
+                    </span>
+                 )}
+              </div>
             </div>
           </div>
           
-          <div className="flex gap-2">
-            <a 
-              href={`https://drive.google.com/drive/folders/${folderId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-blue-600 transition-colors text-sm font-medium"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span className="hidden sm:inline">Mở Drive</span>
-            </a>
-            <button
-              onClick={loadFiles}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-70"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isLoading ? 'Đang tải...' : 'Làm mới'}</span>
-            </button>
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            {/* Search Input */}
+            <div className="relative w-full sm:w-64 group">
+              <input
+                type="text"
+                placeholder="Tìm kiếm file..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-200 bg-slate-50 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white focus:outline-none transition-all text-sm"
+              />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 group-focus-within:text-blue-500 transition-colors" />
+            </div>
+
+            <div className="flex gap-2">
+              <a 
+                href={`https://drive.google.com/drive/folders/${folderId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-blue-600 transition-colors text-sm font-medium whitespace-nowrap"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span className="hidden xl:inline">Mở Drive</span>
+              </a>
+              <button
+                onClick={loadFiles}
+                disabled={isLoading}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-70 whitespace-nowrap"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden xl:inline">{isLoading ? 'Đang tải...' : 'Làm mới'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -120,10 +150,15 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
             <FolderOpen className="w-16 h-16 text-slate-200 mb-4" />
             <p>Thư mục trống</p>
           </div>
+        ) : filteredFiles.length === 0 && !isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400">
+             <Search className="w-12 h-12 text-slate-200 mb-3" />
+             <p>Không tìm thấy file nào khớp với "{searchTerm}"</p>
+          </div>
         ) : (
           <div className="h-full overflow-y-auto p-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {files.map((file) => (
+              {filteredFiles.map((file) => (
                 <div 
                   key={file.id}
                   className="group bg-slate-50 hover:bg-white border border-slate-200 hover:border-blue-300 hover:shadow-md rounded-xl p-4 transition-all flex flex-col gap-3 relative"
