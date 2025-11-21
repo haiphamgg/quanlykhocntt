@@ -28,7 +28,6 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
       const originalPadding = input.style.padding;
       
       // Force a fixed width for the capture to ensure consistent resolution
-      // 1200px is a good balance for quality vs file size
       input.style.width = '1200px'; 
       input.style.padding = '0'; // Remove padding for capture, we add margins in PDF
 
@@ -46,36 +45,30 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
       const imgData = canvas.toDataURL('image/png');
       
       // 2. PDF Setup (A4)
-      // A4 Size: 210mm x 297mm
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = 210;
       const pdfHeight = 297;
       
-      // Margin settings (15mm for clear visibility)
       const marginX = 15;
       const marginY = 15;
       
-      const contentWidth = pdfWidth - (marginX * 2); // 180mm
-      const contentHeight = pdfHeight - (marginY * 2); // 267mm
+      const contentWidth = pdfWidth - (marginX * 2); 
+      const contentHeight = pdfHeight - (marginY * 2);
 
-      // Calculate image dimensions on PDF
       const imgProps = pdf.getImageProperties(imgData);
       const imgHeightOnPdf = (imgProps.height * contentWidth) / imgProps.width;
 
       let heightLeft = imgHeightOnPdf;
-      let position = marginY; // Start Y position
+      let position = marginY;
 
       // 3. Add pages
-      // Page 1
       pdf.addImage(imgData, 'PNG', marginX, position, contentWidth, imgHeightOnPdf);
       heightLeft -= contentHeight;
 
-      // Subsequent Pages
       while (heightLeft > 0) {
         position = heightLeft - imgHeightOnPdf; 
         pdf.addPage();
         
-        // New Position calculation
         const printedHeight = imgHeightOnPdf - heightLeft;
         const yPos = marginY - printedHeight;
 
@@ -147,18 +140,13 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
 
       {/* Grid Area */}
       <div className="flex-1 overflow-auto bg-slate-200/50 p-6 rounded-xl border border-slate-200 shadow-inner no-scrollbar print:bg-white print:p-0 print:border-none print:overflow-visible print:shadow-none">
-        {/* 
-           Layout: Explicitly 3 columns (md:grid-cols-3) to match A4 Portrait print layout.
-        */}
         <div 
           id="printable-area" 
           className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full bg-white p-4 sm:bg-transparent sm:p-0"
         >
           {items.map((item) => {
              const isLink = isImageUrl(item.qrContent);
-             
-             // Revert BOM removal: Pure string content often works better with High Error Correction
-             // on sensitive scanners than forcing a BOM which might be interpreted as data.
+             // Đảm bảo nội dung QR là UTF-8 thuần túy, không BOM
              const qrValue = item.qrContent || "ERROR";
 
              return (
@@ -166,25 +154,17 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
                 key={item.rowId} 
                 className="print-card bg-white border-2 border-slate-800 p-2 rounded-lg flex flex-col justify-between items-center text-center shadow-sm relative overflow-hidden w-full mx-auto h-full min-h-[200px]"
               >
-                {/* 
-                  SECTION 1: Header 
-                  - Ticket Number: Large, Black
-                  - Department: Medium, Bold (Adjusted from previous request)
-                */}
+                {/* Header */}
                 <div className="w-full flex justify-between items-center border-b-2 border-slate-800 pb-1 mb-1 print:border-black min-h-[2.5rem] flex-none gap-2">
                    <div className="text-lg font-black uppercase tracking-wider text-slate-900 print:text-xl leading-none text-left whitespace-nowrap">
                     {item.ticketNumber}
                    </div>
-                   {/* Department: Adjusted to be visible but not overwhelming */}
                    <div className="text-base font-bold uppercase text-slate-800 print:text-lg leading-none text-right break-words flex-1">
                     {item.department}
                    </div>
                 </div>
 
-                {/* 
-                  SECTION 2: QR Code 
-                  flex-1 ensures it takes all remaining space.
-                */}
+                {/* QR Code */}
                 <div className="qr-container flex-1 flex items-center justify-center w-full py-1 overflow-hidden">
                   {isLink ? (
                     <img 
@@ -196,23 +176,24 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
                     <QRCodeSVG 
                       value={qrValue} 
                       size={256} 
-                      level={"H"} // Changed from M to H (High) to improve encoding detection reliability
-                      minVersion={4} // Enforce minimum density
-                      includeMargin={false}
+                      level={"H"} // QUAN TRỌNG: Mức H (High - 30%) giúp máy quét "đoán" bảng mã tốt hơn
+                      minVersion={4} // Lưới đủ dày để chứa dữ liệu UTF-8
+                      includeMargin={true} // Thêm lề trắng an toàn
+                      imageSettings={{
+                        src: "",
+                        height: 0,
+                        width: 0,
+                        excavate: true,
+                      }}
                     />
                   )}
                 </div>
 
-                {/* 
-                  SECTION 3: Footer 
-                */}
+                {/* Footer */}
                 <div className="w-full border-t border-slate-200 pt-1 mt-1 flex flex-col items-center justify-center print:border-black min-h-[4rem] flex-none">
-                   {/* Device Name */}
                    <div className="font-bold text-slate-900 text-lg leading-tight print:text-xl print:leading-tight line-clamp-2 flex items-center justify-center h-auto min-h-[2.5rem] w-full overflow-hidden px-1">
                     {item.deviceName || "Thiết bị"}
                   </div>
-                  
-                  {/* Model/Serial */}
                   <div className="text-sm text-slate-600 font-mono truncate w-full print:text-base print:font-bold print:text-black h-6 flex items-center justify-center mt-0.5">
                     {item.modelSerial ? `${item.modelSerial}` : <span className="opacity-0">-</span>}
                   </div>

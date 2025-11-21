@@ -26,7 +26,7 @@ export const DataInput: React.FC<DataInputProps> = ({ onReload, isLoading, lastU
       
       <div className="flex flex-col gap-2">
         <div className="text-xs text-slate-500 flex justify-between">
-           <span>Google Sheet: DULIEU</span>
+           <span>Google Sheet: DATA</span>
            <span>{lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--'}</span>
         </div>
 

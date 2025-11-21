@@ -1,28 +1,24 @@
 
 import { DriveFile } from '../types';
-
-// Đường dẫn Web App từ Google Apps Script (Miễn phí, không cần API Key/OAuth)
-const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxodndGf6v-1ZkbWx5LBu5IpMXvTsnvAy4lBvx4m0eGk6ef82lVubMCmrhVT0ak7Lw2/exec';
+import { SCRIPT_URL } from './sheetService';
 
 export const fetchDriveFiles = async (folderId: string): Promise<DriveFile[]> => {
   if (!folderId) {
     throw new Error("Chưa cấu hình ID thư mục");
   }
 
-  // Thêm timestamp để tránh Browser Cache (Netlify/Chrome thường cache các request GET)
+  if (!SCRIPT_URL) {
+    throw new Error("Chưa cấu hình Script URL");
+  }
+
+  // CACHE BUSTING: Thêm timestamp vào URL để luôn lấy dữ liệu mới nhất
   const timestamp = new Date().getTime();
-  const url = `${GAS_WEB_APP_URL}?folderId=${folderId}&_t=${timestamp}`;
+  const url = `${SCRIPT_URL}?folderId=${folderId}&_t=${timestamp}`;
 
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      // Các headers này ép buộc trình duyệt không được dùng cache cũ
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
+    // QUAN TRỌNG: Không gửi headers tùy chỉnh (như Cache-Control) vì Google Apps Script
+    // không hỗ trợ CORS preflight (OPTIONS request), gây lỗi "Failed to fetch".
+    const response = await fetch(url);
     
     if (!response.ok) {
       throw new Error(`Lỗi kết nối (${response.status})`);
@@ -30,7 +26,6 @@ export const fetchDriveFiles = async (folderId: string): Promise<DriveFile[]> =>
 
     const data = await response.json();
     
-    // Xử lý lỗi trả về từ script (nếu có)
     if (data.error) {
       throw new Error(data.error);
     }
