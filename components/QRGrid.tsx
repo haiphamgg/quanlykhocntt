@@ -157,6 +157,10 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
           {items.map((item) => {
              const isLink = isImageUrl(item.qrContent);
              
+             // Revert BOM removal: Pure string content often works better with High Error Correction
+             // on sensitive scanners than forcing a BOM which might be interpreted as data.
+             const qrValue = item.qrContent || "ERROR";
+
              return (
               <div 
                 key={item.rowId} 
@@ -190,9 +194,10 @@ export const QRGrid: React.FC<QRGridProps> = ({ items, selectedTicket }) => {
                     />
                   ) : (
                     <QRCodeSVG 
-                      value={item.qrContent || "ERROR"} 
+                      value={qrValue} 
                       size={256} 
-                      level={"M"}
+                      level={"H"} // Changed from M to H (High) to improve encoding detection reliability
+                      minVersion={4} // Enforce minimum density
                       includeMargin={false}
                     />
                   )}
