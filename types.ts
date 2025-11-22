@@ -25,6 +25,12 @@ export interface DriveFile {
   thumbnailLink?: string;
   size?: string | number;
   createdTime?: string;
+  modifiedTime?: string;
+  lastModifyingUser?: {
+    displayName: string;
+    photoLink?: string;
+    emailAddress?: string;
+  };
 }
 
 export interface TransactionItem {

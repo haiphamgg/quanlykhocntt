@@ -1,82 +1,74 @@
 
-import Papa from 'papaparse';
+// URL API CỐ ĐỊNH (Fallback)
+const FALLBACK_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqEtmuL0lOwh_Iibgs7oxx0lSC1HG1ubNcPc6KINu8a-aC3adsK9qTRj9LCjX4z7iq/exec";
 
-// ID của Spreadsheet mới
-export const SPREADSHEET_ID = '1R2j006xS2Cjrcx5i8wDsSmb-hIFhi708ZmhjN3e-DLM';
+// @ts-ignore
+export const SCRIPT_URL = process.env.SCRIPT_URL || FALLBACK_SCRIPT_URL;
 
-// URL của Google Apps Script Web App
-// QUAN TRỌNG: Script này phải có hàm doGet() để DriveService hoạt động
-export const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyQ4YV0htouX3tP_7FstedjAdpjuPqDAWdpjcE11JhugrNW8iTCI0AvAauSoAbOXevd/exec'; 
+export const fetchGoogleSheetData = async (sheetId: string, sheetName: string = 'DULIEU'): Promise<string[][]> => {
+  if (!sheetId) {
+    throw new Error("Chưa nhập Sheet ID.");
+  }
 
-export const fetchGoogleSheetData = async (sheetName: string = 'DATA', range: string = 'A2:Z'): Promise<string[][]> => {
-  // Sử dụng Google Visualization API để lấy dữ liệu dạng CSV (Chỉ đọc - nhanh)
-  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}&range=${range}`;
+  const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}&range=A3:U&headers=1`;
 
   try {
     const response = await fetch(url);
     
     if (!response.ok) {
-      // Xử lý các lỗi HTTP thường gặp
-      if (response.status === 400) {
-         throw new Error(`Không tìm thấy Sheet tên "${sheetName}". Hãy kiểm tra lại tên Tab phía dưới Google Sheet.`);
-      }
-      if (response.status === 403 || response.status === 401) {
-         throw new Error(`Không có quyền truy cập Sheet. Vui lòng nhấn "Share" (Chia sẻ) > "Anyone with the link" (Bất kỳ ai có liên kết).`);
-      }
-      throw new Error(`Lỗi kết nối Sheet "${sheetName}": ${response.statusText} (${response.status})`);
-    }
-    
-    const csvText = await response.text();
-    
-    // Đôi khi Google trả về HTML báo lỗi thay vì CSV
-    if (csvText.trim().startsWith('<!DOCTYPE html>') || csvText.includes("Google Drive - Page Not Found")) {
-         throw new Error(`Không đọc được dữ liệu từ Sheet "${sheetName}". Có thể Sheet chưa được Public hoặc sai tên.`);
+      throw new Error(`Lỗi kết nối: ${response.status}`);
     }
 
-    return new Promise((resolve, reject) => {
-      Papa.parse(csvText, {
-        complete: (results) => {
-          resolve(results.data as string[][]);
-        },
-        error: (error: any) => {
-          reject(new Error("Lỗi phân tích dữ liệu CSV: " + error.message));
-        }
-      });
+    const text = await response.text();
+    const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S\w]+)\);/);
+    
+    if (!jsonMatch || !jsonMatch[1]) {
+      throw new Error("Cấu trúc dữ liệu không hợp lệ (Không phải GVIZ response).");
+    }
+
+    const json = JSON.parse(jsonMatch[1]);
+
+    if (json.status === 'error') {
+      throw new Error(json.errors?.[0]?.detailed_message || "Lỗi từ Google Sheet API");
+    }
+
+    const rows = json.table.rows.map((row: any) => {
+      return (row.c || []).map((cell: any) => (cell ? (cell.v !== null ? String(cell.v) : "") : ""));
     });
+
+    return rows;
   } catch (error: any) {
     console.error(`Error fetching sheet ${sheetName}:`, error);
-    throw error; // Ném lỗi ra để App.tsx bắt và hiển thị thông báo
+    throw new Error("Không thể lấy dữ liệu. Hãy chắc chắn Sheet ID đúng và đã chia sẻ 'Bất kỳ ai có liên kết'.");
   }
 };
 
-export const saveToGoogleSheet = async (data: any): Promise<any> => {
+export const saveToGoogleSheet = async (data: any) => {
   if (!SCRIPT_URL) {
-    throw new Error("Script URL is not configured");
+    throw new Error("Chưa cấu hình Script URL.");
   }
 
   try {
-    // Use fetch with method POST. 
-    // Google Apps Script `doPost(e)` receives the body.
-    // We send JSON string. We do NOT set 'Content-Type': 'application/json' to avoid preflight OPTIONS request which might fail on some GAS deployments.
-    // GAS will receive it as text/plain but can parse the postData.contents.
     const response = await fetch(SCRIPT_URL, {
       method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8',
+      },
       body: JSON.stringify(data)
     });
 
     if (!response.ok) {
-      throw new Error(`Lỗi kết nối server: ${response.status}`);
+      throw new Error(`Server error: ${response.status}`);
     }
 
     const result = await response.json();
-    
     if (result.status === 'error') {
-      throw new Error(result.message || "Lỗi xử lý từ Server");
+      throw new Error(result.message || "Lỗi không xác định từ Script");
     }
-
     return result;
   } catch (error: any) {
-    console.error("Save to sheet failed:", error);
-    throw new Error(error.message || "Không thể lưu dữ liệu");
+    console.error("Error saving to sheet:", error);
+    throw error;
   }
 };

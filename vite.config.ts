@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.VITE_API_KEY || env.API_KEY),
       // Google Drive API Key (New)
       'process.env.DRIVE_API_KEY': JSON.stringify(env.VITE_DRIVE_API_KEY || env.DRIVE_API_KEY),
+      // Google Apps Script URL
+      'process.env.SCRIPT_URL': JSON.stringify(env.VITE_SCRIPT_URL || env.SCRIPT_URL),
       
       // Fallback for other process.env access if strictly needed
       'process.env.NODE_ENV': JSON.stringify(mode),

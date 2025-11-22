@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { DataInput } from './components/DataInput';
 import { TicketSelector } from './components/TicketSelector';
@@ -7,30 +6,36 @@ import { LookupPage } from './components/LookupPage';
 import { DriveFileBrowser } from './components/DriveFileBrowser';
 import { DeviceRow } from './types';
 import { analyzeTicketData } from './services/geminiService';
-import { fetchGoogleSheetData, SPREADSHEET_ID } from './services/sheetService';
-import { Sparkles, LayoutGrid, FolderOpen, Search as SearchIcon, AlertTriangle, Settings, Database } from 'lucide-react';
+import { fetchGoogleSheetData } from './services/sheetService';
+import { 
+  LayoutGrid, Search as SearchIcon, Database, Sparkles, AlertTriangle, 
+  FileText, FolderOpen, Menu, X, Settings
+} from 'lucide-react';
 
-// --- CONFIG ---
-// Cấu hình chỉ số cột dựa trên cấu trúc Sheet "DATA":
-// 0:STT, 1:Type, 2:Partner, 3:Section, 4:TicketNo, 5:Date, 
-// 6:Code, 7:Name, 8:Details, 9:Unit, 10:Brand, 11:Country, 
-// 12:Model, 13:Warranty, 14:Qty, 15:Price, 16:Total, 17:Docs
-const COL_TYPE = 1;
-const COL_PARTNER = 2;
-const COL_SECTION = 3;
-const COL_TICKET = 4;
-const COL_DATE = 5;
-const COL_NAME = 7;
-const COL_MODEL = 12;
-const COL_WARRANTY = 13;
+// CẤU HÌNH CỘT THEO YÊU CẦU
+const COL_TICKET = 4;   // E: Số phiếu
+const COL_QR = 18;      // S: Mã QR
+const COL_NAME = 1;     // B: Tên thiết bị
+const COL_MODEL = 12;   // M: Model
+const COL_DEPT = 3;     // D: Bộ phận
 
-const DOCS_FOLDER_ID = '16khjeVK8e7evRXQQK7z9IJit4yCrO9f1';
-const MATERIALS_FOLDER_ID = '1IUwHzC02O4limzpg7wPQEMpDB9uc5Ui8';
+// ID MẶC ĐỊNH (Hardcoded để tránh lỗi 404)
+const DEFAULT_SHEET_ID = '1vonMQNPV2SI_XxmZ7h781QHS2fZBMSMbIxWQjS7z1B4';
 
-type ViewMode = 'print' | 'lookup' | 'documents' | 'materials';
+// ID THƯ MỤC DRIVE CHÍNH XÁC THEO YÊU CẦU
+const DEFAULT_VOUCHER_ID = '16khjeVK8e7evRXQQK7z9IJit4yCrO9f1'; // Folder Chứng từ
+const DEFAULT_DOC_ID = '1IUwHzC02O4limzpg7wPQEMpDB9uc5Ui8';     // Folder Tài liệu
+
+type ViewMode = 'print' | 'lookup' | 'vouchers' | 'drive';
 
 export default function App() {
   const [rawData, setRawData] = useState<string[][]>([]);
+  
+  // State lưu cấu hình ID
+  const [sheetId, setSheetId] = useState<string>(() => localStorage.getItem('SHEET_ID') || DEFAULT_SHEET_ID);
+  const [voucherFolderId, setVoucherFolderId] = useState<string>(() => localStorage.getItem('VOUCHER_FOLDER_ID') || DEFAULT_VOUCHER_ID);
+  const [docFolderId, setDocFolderId] = useState<string>(() => localStorage.getItem('DOC_FOLDER_ID') || DEFAULT_DOC_ID);
+  
   const [selectedTicket, setSelectedTicket] = useState<string>('');
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -38,18 +43,28 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('print');
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  
+  const handleLoadData = async (targetSheetId: string = sheetId) => {
+    // Đảm bảo ID hợp lệ
+    const idToUse = targetSheetId.trim() || DEFAULT_SHEET_ID;
+    
+    localStorage.setItem('SHEET_ID', idToUse);
+    if (idToUse !== sheetId) setSheetId(idToUse);
 
-  const handleLoadData = async () => {
     setIsLoading(true);
     setConnectionError(null);
     try {
-      // Fetch from A2 to skip header row
-      const data = await fetchGoogleSheetData('DATA', 'A2:Z');
-      if (data && data.length > 0) {
+      const data = await fetchGoogleSheetData(idToUse, 'DULIEU');
+      
+      if (data && Array.isArray(data) && data.length > 0) {
+        console.log("Loaded data rows:", data.length);
         setRawData(data);
         setLastUpdated(new Date());
       } else {
         setRawData([]);
+        setConnectionError("Sheet 'DULIEU' không có dữ liệu hoặc tên Sheet không đúng.");
       }
     } catch (err: any) {
       console.error("Failed to load data", err);
@@ -59,46 +74,51 @@ export default function App() {
     }
   };
 
+  // Auto load ngay khi mở app
   useEffect(() => {
-    handleLoadData();
+    handleLoadData(sheetId);
   }, []);
+
+  const handleSaveConfig = () => {
+    localStorage.setItem('SHEET_ID', sheetId);
+    localStorage.setItem('VOUCHER_FOLDER_ID', voucherFolderId);
+    localStorage.setItem('DOC_FOLDER_ID', docFolderId);
+    handleLoadData(sheetId);
+    setShowSettings(false);
+  };
 
   const parsedData: DeviceRow[] = useMemo(() => {
     if (!rawData || rawData.length === 0) return [];
 
     return rawData
       .map((row, index) => {
-        const ticketNumber = row[COL_TICKET]?.trim() || '';
-        if (!ticketNumber) return null;
+        // Lấy số phiếu
+        const ticketNumber = row[COL_TICKET] ? String(row[COL_TICKET]).trim() : '';
+        // Bỏ qua dòng tiêu đề hoặc dòng trống
+        if (!ticketNumber || ticketNumber.toUpperCase() === 'SỐ PHIẾU' || ticketNumber.toUpperCase().includes('TICKET')) return null;
 
-        const deviceName = row[COL_NAME]?.trim() || '';
-        const partner = row[COL_PARTNER]?.trim() || '';
-        const section = row[COL_SECTION]?.trim() || '';
-        const date = row[COL_DATE]?.trim() || '';
-        const modelSerial = row[COL_MODEL]?.trim() || '';
-        const warranty = row[COL_WARRANTY]?.trim() || '';
-        const type = row[COL_TYPE]?.trim() || '';
-        
-        const isPX = type === 'PX' || ticketNumber.toUpperCase().startsWith("PX");
-        const labelProvider = isPX ? "Khoa phòng: " : "Nhà CC: ";
-        const labelDate = isPX ? "Ngày cấp: " : "Ngày giao: ";
+        const deviceName = row[COL_NAME] ? String(row[COL_NAME]).trim() : 'Thiết bị';
+        let qrContent = row[COL_QR] ? String(row[COL_QR]).trim() : '';
 
-        // Format QR: Tên | NCC/KP | BP | Ngày | Model | BH
-        const qrContent = `Tên thiết bị: ${deviceName}\n` +
-                          `${labelProvider}${partner}\n` +
-                          `Bộ phận sử dụng: ${section}\n` +
-                          `${labelDate}${date}\n` +
-                          `Model, Serial: ${modelSerial}\n` +
-                          `Bảo hành: ${warranty}`;
+        // FALLBACK: Tự tạo nội dung QR nếu cột S rỗng hoặc lỗi #N/A
+        if (!qrContent || qrContent === '#N/A' || qrContent.startsWith('Error') || qrContent.trim() === '') {
+            const detail = row[2] || '';
+            const dept = row[3] || ''; // D
+            const date = row[5] || ''; // F
+            const model = row[12] || ''; // M
+            const warranty = row[13] || ''; // N
+            // Format QR text
+            qrContent = `${deviceName}\n${detail}\nModel: ${model}\n${dept}\n${ticketNumber} (${date})\nBH: ${warranty}`;
+        }
 
         return {
           rowId: index,
           ticketNumber: ticketNumber,
           qrContent: qrContent,
-          department: section,
-          provider: partner,
+          department: row[COL_DEPT] || '',
+          provider: row[2] || '', // Cột C: Nguồn / Nhà CC
           deviceName: deviceName,
-          modelSerial: modelSerial,
+          modelSerial: row[COL_MODEL] || '',
           fullData: row
         } as DeviceRow;
       })
@@ -107,13 +127,14 @@ export default function App() {
 
   const uniqueTickets = useMemo(() => {
     const tickets = new Set(parsedData.map(d => d.ticketNumber));
-    return Array.from(tickets).sort();
+    return Array.from(tickets).sort().reverse();
   }, [parsedData]);
 
   const selectedItems = useMemo(() => {
     return parsedData.filter(d => d.ticketNumber === selectedTicket);
   }, [parsedData, selectedTicket]);
 
+  // Phân tích AI (Chỉ chạy khi ở màn hình In Tem)
   useEffect(() => {
     if (viewMode === 'print' && selectedTicket && selectedItems.length > 0) {
       const runAnalysis = async () => {
@@ -128,56 +149,131 @@ export default function App() {
     }
   }, [selectedTicket, selectedItems, viewMode]);
 
-  const renderContent = () => {
-    // Error State Display
-    if (connectionError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full bg-red-50/50 p-6">
-          <div className="bg-white p-8 rounded-2xl shadow-lg max-w-2xl w-full border border-red-100 text-center">
-            <div className="bg-red-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-8 h-8 text-red-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">Lỗi kết nối dữ liệu</h2>
-            <p className="text-red-600 font-medium mb-6 bg-red-50 p-3 rounded-lg border border-red-200 inline-block">
-              {connectionError}
-            </p>
-            
-            <div className="text-left bg-slate-50 p-5 rounded-xl border border-slate-200 mb-6">
-              <h3 className="font-semibold text-slate-800 flex items-center gap-2 mb-3">
-                <Settings className="w-5 h-5 text-blue-600" />
-                Hướng dẫn khắc phục:
-              </h3>
-              <ul className="space-y-3 text-sm text-slate-600 list-disc pl-5">
-                <li>
-                  <strong>Bước 1:</strong> Mở Google Sheet của bạn: <a href={`https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}`} target="_blank" className="text-blue-600 underline">Link Sheet</a>
-                </li>
-                <li>
-                  <strong>Bước 2:</strong> Đảm bảo tên Sheet chứa dữ liệu là <span className="font-mono bg-slate-200 px-1 rounded mx-1">DATA</span>.
-                </li>
-                <li>
-                  <strong>Bước 3:</strong> Nhấn nút <span className="font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Share</span> (Chia sẻ) góc trên bên phải.
-                </li>
-                <li>
-                  <strong>Bước 4:</strong> Ở phần "General access", chọn <span className="font-bold">"Anyone with the link"</span> (Bất kỳ ai có liên kết).
-                </li>
-              </ul>
-            </div>
+  const NavButton = ({ mode, icon: Icon, label, colorClass }: any) => (
+    <button
+      onClick={() => { setViewMode(mode); setMobileMenuOpen(false); }}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-bold transition-all w-full md:w-auto whitespace-nowrap
+        ${viewMode === mode 
+          ? `bg-white shadow-md ${colorClass} border border-slate-100` 
+          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+        }`}
+    >
+      <Icon className="w-5 h-5" />
+      {label}
+    </button>
+  );
 
-            <button 
-              onClick={handleLoadData}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95 flex items-center gap-2 mx-auto"
-            >
-              <Sparkles className="w-5 h-5" />
-              Thử lại
-            </button>
+  return (
+    <div className="h-full flex flex-col bg-slate-50">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shrink-0 no-print shadow-sm z-30 relative">
+        <div className="flex items-center gap-3">
+          <div className="bg-blue-600 text-white p-2 rounded-lg shadow-lg shadow-blue-500/30">
+             <Database className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800 leading-tight hidden sm:block">QR Print Master</h1>
+            <p className="text-xs text-slate-500 hidden sm:block">Hệ thống in tem & quản lý</p>
           </div>
         </div>
-      );
-    }
 
-    switch (viewMode) {
-      case 'print':
-        return (
+        {/* Desktop Nav */}
+        <div className="hidden md:flex flex-1 items-center justify-center px-4 overflow-x-auto">
+           <div className="flex bg-slate-100 p-1.5 rounded-xl gap-1">
+              <NavButton mode="print" icon={LayoutGrid} label="In Tem" colorClass="text-blue-600" />
+              <NavButton mode="lookup" icon={SearchIcon} label="Tra Cứu" colorClass="text-purple-600" />
+              <NavButton mode="vouchers" icon={FileText} label="Chứng Từ" colorClass="text-emerald-600" />
+              <NavButton mode="drive" icon={FolderOpen} label="Tài Liệu" colorClass="text-red-500" />
+           </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+            <button onClick={() => setShowSettings(!showSettings)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors" title="Cấu hình">
+                <Settings className="w-5 h-5" />
+            </button>
+            <button 
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
+            >
+                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
+        </div>
+      </header>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4" onClick={() => setShowSettings(false)}>
+           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+              <div className="p-4 border-b border-slate-100 font-bold text-slate-800 flex justify-between items-center">
+                  <span>Cấu hình hệ thống</span>
+                  <button onClick={() => setShowSettings(false)}><X className="w-5 h-5 text-slate-400"/></button>
+              </div>
+              <div className="p-4 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
+                 <div>
+                    <label className="text-sm font-medium text-slate-700 mb-1 block">Google Sheet ID (Dữ liệu)</label>
+                    <input 
+                        value={sheetId}
+                        onChange={(e) => setSheetId(e.target.value)}
+                        className="w-full p-2 border border-slate-300 rounded font-mono text-sm"
+                    />
+                    <button 
+                        onClick={() => setSheetId(DEFAULT_SHEET_ID)}
+                        className="text-xs text-blue-600 hover:underline mt-1"
+                    >
+                        Sử dụng mặc định
+                    </button>
+                 </div>
+                 <div>
+                    <label className="text-sm font-medium text-emerald-700 mb-1 block">Folder ID (Chứng Từ)</label>
+                    <input 
+                        value={voucherFolderId}
+                        onChange={(e) => setVoucherFolderId(e.target.value)}
+                        className="w-full p-2 border border-emerald-200 bg-emerald-50 rounded font-mono text-sm"
+                        placeholder="ID thư mục Drive chứng từ"
+                    />
+                 </div>
+                 <div>
+                    <label className="text-sm font-medium text-red-700 mb-1 block">Folder ID (Tài Liệu)</label>
+                    <input 
+                        value={docFolderId}
+                        onChange={(e) => setDocFolderId(e.target.value)}
+                        className="w-full p-2 border border-red-200 bg-red-50 rounded font-mono text-sm"
+                        placeholder="ID thư mục Drive tài liệu"
+                    />
+                 </div>
+                 <button 
+                    onClick={handleSaveConfig}
+                    className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 mt-2"
+                 >
+                    Lưu & Cập nhật
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-40 bg-white pt-20 px-4 flex flex-col gap-2 md:hidden">
+            <NavButton mode="print" icon={LayoutGrid} label="In Tem" colorClass="text-blue-600" />
+            <NavButton mode="lookup" icon={SearchIcon} label="Tra Cứu" colorClass="text-purple-600" />
+            <NavButton mode="vouchers" icon={FileText} label="Chứng Từ" colorClass="text-emerald-600" />
+            <NavButton mode="drive" icon={FolderOpen} label="Tài Liệu" colorClass="text-red-500" />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-hidden relative">
+        {/* Error Banner */}
+        {connectionError && (
+             <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-red-50 border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm animate-in fade-in slide-in-from-top-4">
+                <AlertTriangle className="w-4 h-4" />
+                {connectionError}
+                <button onClick={() => handleLoadData(sheetId)} className="underline font-semibold hover:text-red-800 ml-2">Thử lại</button>
+             </div>
+        )}
+
+        {/* MODE 1: IN TEM */}
+        {viewMode === 'print' && (
           <div className="h-full flex flex-col md:flex-row">
             <div className="w-full md:w-80 bg-white border-r border-slate-200 p-4 overflow-y-auto flex flex-col gap-4 shrink-0 no-print shadow-lg z-10">
               <DataInput 
@@ -185,12 +281,17 @@ export default function App() {
                 isLoading={isLoading} 
                 lastUpdated={lastUpdated}
                 rowCount={parsedData.length}
+                currentSheetId={sheetId}
               />
-              <TicketSelector 
-                tickets={uniqueTickets} 
-                selectedTicket={selectedTicket} 
-                onSelect={setSelectedTicket} 
-              />
+              
+              <div className="border-t border-slate-100 pt-4">
+                <TicketSelector 
+                  tickets={uniqueTickets} 
+                  selectedTicket={selectedTicket} 
+                  onSelect={setSelectedTicket} 
+                />
+              </div>
+
               {selectedTicket && (
                 <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 shadow-sm mt-auto">
                   <div className="flex items-center gap-2 mb-2 text-indigo-700">
@@ -207,50 +308,35 @@ export default function App() {
               <QRGrid items={selectedItems} selectedTicket={selectedTicket} />
             </main>
           </div>
-        );
-      case 'lookup': return <LookupPage data={parsedData} onReload={handleLoadData} isLoading={isLoading} lastUpdated={lastUpdated} />;
-      case 'documents': return <DriveFileBrowser folderId={DOCS_FOLDER_ID} title="Chứng từ Kho" description="Danh sách phiếu xuất nhập kho." />;
-      case 'materials': return <DriveFileBrowser folderId={MATERIALS_FOLDER_ID} title="Tài liệu kỹ thuật" description="Hướng dẫn sử dụng & thông số." />;
-      default: return null;
-    }
-  };
+        )}
 
-  const NavButton = ({ mode, icon: Icon, label, colorClass }: any) => (
-    <button
-      onClick={() => setViewMode(mode)}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${
-        viewMode === mode ? `bg-white shadow-md ${colorClass}` : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
-      }`}
-    >
-      <Icon className="w-4 h-4" />
-      {label}
-    </button>
-  );
+        {/* MODE 2: TRA CỨU */}
+        {viewMode === 'lookup' && (
+          <LookupPage 
+            data={parsedData} 
+            onReload={() => handleLoadData(sheetId)} 
+            isLoading={isLoading} 
+            lastUpdated={lastUpdated} 
+          />
+        )}
 
-  return (
-    <div className="h-full flex flex-col bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex flex-col md:flex-row gap-4 justify-between shrink-0 no-print shadow-sm z-20 relative">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 text-white p-2 rounded-lg shadow-lg shadow-blue-500/30">
-             <Database className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800 leading-tight">QR Print Master</h1>
-            <p className="text-xs text-slate-500">Kho thiết bị & Vật tư</p>
-          </div>
-        </div>
-
-        <div className="flex flex-1 overflow-x-auto no-scrollbar bg-slate-100 p-1.5 rounded-xl max-w-full md:max-w-2xl justify-between md:justify-start gap-1">
-          <NavButton mode="print" icon={LayoutGrid} label="In Tem QR" colorClass="text-blue-600" />
-          <NavButton mode="lookup" icon={SearchIcon} label="Tra Cứu" colorClass="text-purple-600" />
-          <div className="w-px bg-slate-300 mx-2 my-1 hidden md:block"></div>
-          <NavButton mode="documents" icon={FolderOpen} label="Chứng từ" colorClass="text-amber-600" />
-          <NavButton mode="materials" icon={FolderOpen} label="Tài liệu" colorClass="text-emerald-600" />
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-hidden relative">
-        {renderContent()}
+        {/* MODE 3: CHỨNG TỪ */}
+        {viewMode === 'vouchers' && (
+           <DriveFileBrowser 
+             folderId={voucherFolderId} 
+             title="Kho Chứng Từ" 
+             description="Biên bản, Phiếu xuất/nhập kho (PDF)" 
+           />
+        )}
+        
+        {/* MODE 4: TÀI LIỆU */}
+        {viewMode === 'drive' && (
+           <DriveFileBrowser 
+             folderId={docFolderId} 
+             title="Tài Liệu Kỹ Thuật" 
+             description="Catalogue, Hướng dẫn sử dụng" 
+           />
+        )}
       </div>
     </div>
   );

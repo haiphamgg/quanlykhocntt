@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Package, Calendar, Tag, FileText, ExternalLink, RefreshCw, Building2 } from 'lucide-react';
+import { Search, Package, Calendar, Tag, FileText, ExternalLink, RefreshCw, Box } from 'lucide-react';
 import { DeviceRow } from '../types';
 
 interface LookupPageProps {
@@ -9,9 +9,6 @@ interface LookupPageProps {
   isLoading: boolean;
   lastUpdated: Date | null;
 }
-
-// ID của thư mục Google Drive chứa chứng từ
-const DRIVE_FOLDER_ID = '16khjeVK8e7evRXQQK7z9IJit4yCrO9f1';
 
 export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoading, lastUpdated }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,19 +20,11 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
       row.ticketNumber.toLowerCase().includes(lowerTerm) ||
       row.deviceName.toLowerCase().includes(lowerTerm) ||
       row.modelSerial.toLowerCase().includes(lowerTerm) ||
-      row.department.toLowerCase().includes(lowerTerm) ||
-      row.provider.toLowerCase().includes(lowerTerm)
+      row.department.toLowerCase().includes(lowerTerm)
     );
   }, [data, searchTerm]);
 
-  // Limit initial display to improve performance
   const displayData = filteredData.slice(0, 100);
-
-  // Helper to generate smart search link
-  const getDriveSearchLink = (ticket: string) => {
-    // Creates a link that searches specifically inside the folder for the ticket number
-    return `https://drive.google.com/drive/folders/${DRIVE_FOLDER_ID}?q=${encodeURIComponent(ticket)}`;
-  };
 
   return (
     <div className="h-full flex flex-col bg-slate-50 p-4 md:p-6 overflow-hidden">
@@ -49,21 +38,16 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
             <div>
               <div className="flex items-center gap-3">
                 <h2 className="text-xl font-bold text-slate-800">Tra cứu thiết bị</h2>
-                
-                {/* REFRESH BUTTON ADDED */}
                 <button
                   onClick={onReload}
                   disabled={isLoading}
                   className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-all active:scale-95 disabled:opacity-50"
-                  title="Cập nhật dữ liệu mới nhất"
                 >
                   <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
                 </button>
               </div>
-              <p className="text-sm text-slate-500 mt-0.5 flex items-center gap-2">
-                <span>{data.length} bản ghi</span>
-                <span className="text-slate-300">•</span>
-                <span className="text-xs">Cập nhật: {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--'}</span>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {data.length} dòng dữ liệu • Cập nhật: {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--'}
               </p>
             </div>
           </div>
@@ -71,7 +55,7 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
           <div className="relative w-full md:w-96 group">
             <input
               type="text"
-              placeholder="Tìm tên, model, số phiếu, nơi cung cấp..."
+              placeholder="Tìm tên, model, số phiếu..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-11 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all shadow-sm"
@@ -87,12 +71,11 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
           <table className="w-full text-left">
             <thead className="text-xs text-slate-500 uppercase bg-slate-50/80 sticky top-0 z-10 backdrop-blur-sm">
               <tr>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Số Phiếu</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[25%]">Thiết Bị</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Model / Serial</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Nguồn / Nhà CC</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Bộ Phận SD</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%] text-right">Ngày</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Số Phiếu (E)</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[30%]">Thiết Bị (B)</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[20%]">Model (M)</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[20%]">Bộ Phận (D)</th>
+                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%] text-right">Mã QR (S)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -100,79 +83,50 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
                 displayData.map((row) => (
                   <tr key={row.rowId} className="hover:bg-indigo-50/30 transition-colors group">
                     <td className="px-6 py-4 align-top">
-                      <div className="flex flex-col items-start gap-2">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 font-bold text-sm border border-blue-100">
+                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 font-bold text-sm border border-blue-100">
                           <FileText className="w-4 h-4" />
                           {row.ticketNumber}
                         </span>
-                        
-                        {/* Link to Drive Search */}
-                        <a 
-                          href={getDriveSearchLink(row.ticketNumber)}
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-slate-500 hover:text-blue-600 font-medium transition-colors ml-1 group/link"
-                          title="Mở thư mục chứng từ trên Google Drive"
-                        >
-                          <ExternalLink className="w-3 h-3 group-hover/link:scale-110 transition-transform" />
-                          Xem chứng từ
-                        </a>
-                      </div>
                     </td>
                     <td className="px-6 py-4 align-top">
-                      <div className="font-bold text-slate-800 text-lg mb-1 group-hover:text-indigo-700 transition-colors">
+                      <div className="font-bold text-slate-800 text-base mb-1">
                         {row.deviceName}
-                      </div>
-                      <div className="text-sm text-slate-500 flex items-center gap-1">
-                        <Tag className="w-3.5 h-3.5" /> 
-                        {row.ticketNumber.startsWith('PX') ? 'Xuất kho' : 'Nhập kho'}
                       </div>
                     </td>
                     <td className="px-6 py-4 align-top">
                       {row.modelSerial ? (
-                        <div className="font-mono text-sm font-semibold text-slate-700 bg-slate-100 px-2 py-1 rounded w-fit border border-slate-200">
+                        <div className="font-mono text-sm text-slate-600">
                           {row.modelSerial}
                         </div>
                       ) : (
-                        <span className="text-slate-300 text-sm italic">N/A</span>
-                      )}
-                    </td>
-                    {/* NEW COLUMN: PROVIDER (Moved after Model/Serial) */}
-                    <td className="px-6 py-4 align-top">
-                      {row.provider ? (
-                        <div className="flex items-start gap-2 text-slate-700 text-sm">
-                          <Building2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                          <span>{row.provider}</span>
-                        </div>
-                      ) : (
-                         <span className="text-slate-300 text-sm italic">--</span>
+                        <span className="text-slate-300 text-sm italic">--</span>
                       )}
                     </td>
                     <td className="px-6 py-4 align-top">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                        <span className="text-slate-700 font-semibold text-base">{row.department}</span>
-                      </div>
+                       <div className="text-slate-700 text-sm">
+                          {row.department || '--'}
+                       </div>
                     </td>
-                    <td className="px-6 py-4 align-top text-right text-slate-500 font-mono text-sm">
-                       {row.fullData[5] ? (
-                         <span className="inline-flex items-center gap-1.5">
-                           {row.fullData[5]}
-                           <Calendar className="w-4 h-4 text-slate-400" />
+                    <td className="px-6 py-4 align-top text-right">
+                       {row.qrContent && row.qrContent.startsWith('http') ? (
+                         <img src={row.qrContent} alt="QR" className="w-8 h-8 object-contain ml-auto border border-slate-200 rounded" />
+                       ) : (
+                         <span className="text-xs font-mono text-slate-400 truncate max-w-[100px] inline-block" title={row.qrContent}>
+                           {row.qrContent}
                          </span>
-                       ) : '-'}
+                       )}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
                       <div className="bg-slate-50 p-4 rounded-full mb-3">
-                        <Search className="w-8 h-8 text-slate-300" />
+                        <Box className="w-8 h-8 text-slate-300" />
                       </div>
-                      <p className="font-medium text-slate-500">Không tìm thấy kết quả nào</p>
-                      <p className="text-sm mt-1">Thử tìm kiếm với từ khóa khác</p>
+                      <p className="font-medium text-slate-500">Không tìm thấy dữ liệu</p>
+                      <p className="text-sm mt-1">Vui lòng kiểm tra Sheet ID và tên Sheet "DULIEU"</p>
                     </div>
                   </td>
                 </tr>
@@ -182,9 +136,6 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
         </div>
         <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
           <span>Hiển thị {displayData.length} / {filteredData.length} kết quả</span>
-          {filteredData.length > 100 && (
-            <span className="text-orange-500 italic">Kết quả được giới hạn để tối ưu hiệu năng</span>
-          )}
         </div>
       </div>
     </div>

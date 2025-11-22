@@ -1,23 +1,21 @@
 
 import { DriveFile } from '../types';
-import { SCRIPT_URL } from './sheetService';
+// import { SCRIPT_URL } from './sheetService'; // Removed hard dependency
 
-export const fetchDriveFiles = async (folderId: string): Promise<DriveFile[]> => {
+export const fetchDriveFiles = async (folderId: string, scriptUrl: string): Promise<DriveFile[]> => {
   if (!folderId) {
     throw new Error("Chưa cấu hình ID thư mục");
   }
 
-  if (!SCRIPT_URL) {
+  if (!scriptUrl) {
     throw new Error("Chưa cấu hình Script URL");
   }
 
-  // CACHE BUSTING: Thêm timestamp vào URL để luôn lấy dữ liệu mới nhất
+  // CACHE BUSTING
   const timestamp = new Date().getTime();
-  const url = `${SCRIPT_URL}?folderId=${folderId}&_t=${timestamp}`;
+  const url = `${scriptUrl}?folderId=${folderId}&_t=${timestamp}`;
 
   try {
-    // QUAN TRỌNG: Không gửi headers tùy chỉnh (như Cache-Control) vì Google Apps Script
-    // không hỗ trợ CORS preflight (OPTIONS request), gây lỗi "Failed to fetch".
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -33,7 +31,7 @@ export const fetchDriveFiles = async (folderId: string): Promise<DriveFile[]> =>
     return data.files || [];
   } catch (error: any) {
     console.error("Failed to fetch drive files:", error);
-    throw new Error(error.message || "Lỗi không xác định khi tải dữ liệu từ Drive");
+    throw new Error(error.message || "Lỗi kết nối đến Google Apps Script");
   }
 };
 

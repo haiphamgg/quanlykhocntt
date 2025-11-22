@@ -6,9 +6,10 @@ import { Save, Plus, Trash2, FileInput, FileOutput, Calendar, User, Building, Ha
 
 interface WarehouseFormProps {
   type: 'import' | 'export';
+  sheetId: string;
 }
 
-export const WarehouseForm: React.FC<WarehouseFormProps> = ({ type }) => {
+export const WarehouseForm: React.FC<WarehouseFormProps> = ({ type, sheetId }) => {
   const isImport = type === 'import';
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -41,18 +42,20 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ type }) => {
 
   // Load Master Data
   useEffect(() => {
+    if (!sheetId) return;
+    
     const loadMasters = async () => {
       setIsLoading(true);
       try {
-        // Fetch parallel
+        // Fetch parallel using the provided sheetId
         const [ncc, dept, sec, dev, dvt, hangsx, nuocsx] = await Promise.all([
-            fetchGoogleSheetData('DM_NCC'),
-            fetchGoogleSheetData('DM_KHOAPHONG'),
-            fetchGoogleSheetData('DM_BOPHAN'),
-            fetchGoogleSheetData('DM_THIETBI'),
-            fetchGoogleSheetData('DM_DVT'),
-            fetchGoogleSheetData('DM_HANGSX'),
-            fetchGoogleSheetData('DM_NUOCSX')
+            fetchGoogleSheetData(sheetId, 'DM_NCC'),
+            fetchGoogleSheetData(sheetId, 'DM_KHOAPHONG'),
+            fetchGoogleSheetData(sheetId, 'DM_BOPHAN'),
+            fetchGoogleSheetData(sheetId, 'DM_THIETBI'),
+            fetchGoogleSheetData(sheetId, 'DM_DVT'),
+            fetchGoogleSheetData(sheetId, 'DM_HANGSX'),
+            fetchGoogleSheetData(sheetId, 'DM_NUOCSX')
         ]);
 
         setSuppliers(ncc.map(r => r[1]).filter(Boolean)); // Col B: Name
@@ -81,7 +84,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ type }) => {
         partner: '',
         items: []
     }));
-  }, [type]);
+  }, [type, sheetId]);
 
   // Auto-fill device info
   const handleDeviceSelect = (code: string) => {
