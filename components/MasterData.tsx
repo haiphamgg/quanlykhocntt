@@ -164,7 +164,7 @@ const DeviceEditModal = ({
                             className="w-full p-2 border border-slate-300 rounded text-sm"
                             placeholder="Cái/Bộ/Hộp"
                         />
-                         <datalist id="dl-units-modal">{dropdowns.units.map(u => <option key={u} value={u}/>)}</datalist>
+                         <datalist id="dl-units-modal">{dropdowns.units.map((u, i) => <option key={i} value={u}/>)}</datalist>
                     </div>
                     <div className="col-span-2">
                         <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Tên Thiết Bị *</label>
@@ -191,7 +191,7 @@ const DeviceEditModal = ({
                             onChange={e => setFormData({...formData, brand: e.target.value})}
                             className="w-full p-2 border border-slate-300 rounded text-sm"
                         />
-                        <datalist id="dl-brands-modal">{dropdowns.brands.map(b => <option key={b} value={b}/>)}</datalist>
+                        <datalist id="dl-brands-modal">{dropdowns.brands.map((b, i) => <option key={i} value={b}/>)}</datalist>
                     </div>
                     <div className="col-span-1">
                         <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nước SX</label>
@@ -201,7 +201,7 @@ const DeviceEditModal = ({
                             onChange={e => setFormData({...formData, country: e.target.value})}
                             className="w-full p-2 border border-slate-300 rounded text-sm"
                         />
-                        <datalist id="dl-countries-modal">{dropdowns.countries.map(c => <option key={c} value={c}/>)}</datalist>
+                        <datalist id="dl-countries-modal">{dropdowns.countries.map((c, i) => <option key={i} value={c}/>)}</datalist>
                     </div>
                     <div className="col-span-2">
                         <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Model</label>
@@ -269,22 +269,26 @@ export const MasterData: React.FC = () => {
 
       // Nếu đang ở tab DEVICE, load thêm DMDC để lấy dropdown
       if (activeConfig.id === 'DEVICE') {
-          const dmdc = await fetchGoogleSheetData(sheetId, 'DMDC!C4:D'); // C: Brand, D: Country
-          // Lấy unique Units từ danh sách device hiện tại
+          // Lấy rộng hơn (A:E) để có đủ Brand/Country/Supplier
+          const dmdc = await fetchGoogleSheetData(sheetId, 'DMDC!A4:E'); 
+          
+          // Lấy unique Units từ danh sách device hiện tại (cột F = index 3 trong result)
           const uSet = new Set<string>();
-          result.forEach(r => { if(r[3]) uSet.add(r[3]) }); // Unit is at index 3
+          result.forEach(r => { if(r[3]) uSet.add(r[3]) }); 
 
           const bSet = new Set<string>();
           const cSet = new Set<string>();
+          
           dmdc.forEach(r => {
-              if(r[0]) bSet.add(r[0]); // Brand
-              if(r[1]) cSet.add(r[1]); // Country
+              // DMDC Structure: A=Dept(0), B=Section(1), C=Brand(2), D=Country(3), E=Supplier(4)
+              if(r[2]) bSet.add(r[2]); // Brand
+              if(r[3]) cSet.add(r[3]); // Country
           });
 
           setDropdowns({
-              units: Array.from(uSet),
-              brands: Array.from(bSet),
-              countries: Array.from(cSet)
+              units: Array.from(uSet).sort(),
+              brands: Array.from(bSet).sort(),
+              countries: Array.from(cSet).sort()
           });
       }
 

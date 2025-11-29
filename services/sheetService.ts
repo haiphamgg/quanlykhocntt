@@ -30,7 +30,6 @@ export const fetchGoogleSheetData = async (sheetId: string, sheetNameOrRange: st
     }
 
     const text = await response.text();
-    // GVIZ trả về JSON bọc trong callback, cần parse
     const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S\w]+)\);/);
     
     if (!jsonMatch || !jsonMatch[1]) {
@@ -54,23 +53,28 @@ export const fetchGoogleSheetData = async (sheetId: string, sheetNameOrRange: st
   }
 };
 
-export const saveToGoogleSheet = async (data: any) => {
-  if (!SCRIPT_URL) {
-    throw new Error("Chưa cấu hình Script URL.");
+export const saveToGoogleSheet = async (data: any, explicitScriptUrl?: string) => {
+  // Ưu tiên URL được truyền vào, sau đó đến localStorage, cuối cùng là fallback
+  const userScriptUrl = localStorage.getItem('SCRIPT_URL');
+  const targetUrl = explicitScriptUrl || userScriptUrl || SCRIPT_URL;
+
+  if (!targetUrl || !targetUrl.startsWith('http')) {
+    throw new Error("Script URL không hợp lệ. Hãy kiểm tra ô A2 sheet DMDC hoặc cấu hình Admin.");
   }
 
+  const payload = JSON.stringify(data);
+
   try {
-    const response = await fetch(SCRIPT_URL, {
+    const response = await fetch(targetUrl, {
       method: 'POST',
-      mode: 'cors',
+      body: payload,
       headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
+        "Content-Type": "text/plain;charset=utf-8",
       },
-      body: JSON.stringify(data)
     });
 
     if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+        throw new Error(`Server returned ${response.status} ${response.statusText}`);
     }
 
     const result = await response.json();
@@ -78,8 +82,14 @@ export const saveToGoogleSheet = async (data: any) => {
       throw new Error(result.message || "Lỗi không xác định từ Script");
     }
     return result;
+
   } catch (error: any) {
     console.error("Error saving to sheet:", error);
+    
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+       throw new Error(`Lỗi kết nối (CORS) đến Script. \n\nNGUYÊN NHÂN THƯỜNG GẶP:\n1. URL trong sheet DMDC!A2 sai.\n2. Script chưa được Deploy đúng cách.\n   -> Hãy vào Script Editor -> Deploy -> New Deployment -> Select type: Web app -> Who has access: "Anyone" (Quan trọng!).`);
+    }
+    
     throw error;
   }
 };

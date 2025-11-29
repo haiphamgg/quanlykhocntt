@@ -3,17 +3,18 @@ import React, { useState } from 'react';
 import { Lock, X, ShieldCheck, AlertCircle } from 'lucide-react';
 
 interface AdminLoginProps {
-  onLogin: (pin: string) => boolean;
+  onLogin: (pin: string, remember: boolean) => boolean;
   onClose: () => void;
 }
 
 export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onClose }) => {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const [remember, setRemember] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const success = onLogin(pin);
+    const success = onLogin(pin, remember);
     if (!success) {
       setError(true);
       setPin('');
@@ -48,9 +49,8 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onClose }) => {
                type="password"
                value={pin}
                onChange={(e) => { setPin(e.target.value); setError(false); }}
-               className={`w-full text-center text-2xl tracking-[0.5em] font-bold py-3 border-2 rounded-lg focus:outline-none focus:ring-2 transition-all ${error ? 'border-red-300 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-100'}`}
-               placeholder="••••••"
-               maxLength={6}
+               className={`w-full text-center text-xl tracking-widest font-bold py-3 border-2 rounded-lg focus:outline-none focus:ring-2 transition-all ${error ? 'border-red-300 focus:ring-red-200 bg-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-blue-100'}`}
+               placeholder="Nhập mã PIN"
                autoFocus
              />
              {error && (
@@ -60,6 +60,16 @@ export const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onClose }) => {
                 </div>
              )}
           </div>
+          
+          <label className="flex items-center justify-center gap-2 mb-6 cursor-pointer text-sm text-slate-600 select-none">
+              <input 
+                 type="checkbox" 
+                 checked={remember} 
+                 onChange={e => setRemember(e.target.checked)}
+                 className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Ghi nhớ đăng nhập trên máy này</span>
+          </label>
 
           <button
             type="submit"

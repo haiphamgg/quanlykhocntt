@@ -16,7 +16,7 @@ import { fetchGoogleSheetData } from './services/sheetService';
 import { 
   LayoutGrid, Search as SearchIcon, Database, Sparkles, AlertTriangle, 
   FileText, FolderOpen, Menu, X, Settings, LogOut, QrCode, ChevronRight,
-  LayoutDashboard, FileInput, FileOutput, BarChart3, List
+  LayoutDashboard, FileInput, FileOutput, BarChart3, List, Lock, KeyRound, Link
 } from 'lucide-react';
 
 // CẤU HÌNH CỘT
@@ -30,8 +30,10 @@ const COL_DEPT = 3;     // D: Bộ phận
 const DEFAULT_SHEET_ID = '1vonMQNPV2SI_XxmZ7h781QHS2fZBMSMbIxWQjS7z1B4';
 const DEFAULT_VOUCHER_ID = '16khjeVK8e7evRXQQK7z9IJit4yCrO9f1'; 
 const DEFAULT_DOC_ID = '1IUwHzC02O4limzpg7wPQEMpDB9uc5Ui8';     
+// Fallback URL chỉ để demo
+const DEFAULT_SCRIPT_URL_DEMO = "https://script.google.com/macros/s/AKfycbyqEtmuL0lOwh_Iibgs7oxx0lSC1HG1ubNcPc6KINu8a-aC3adsK9qTRj9LCjX4z7iq/exec";
 
-const ADMIN_PIN = "123456"; 
+const DEFAULT_ADMIN_PIN = "@3647"; 
 
 type ViewMode = 'dashboard' | 'print' | 'lookup' | 'vouchers' | 'drive' | 'warehouse-in' | 'warehouse-out' | 'report' | 'master';
 
@@ -58,11 +60,12 @@ const formatDate = (input: string): string => {
 export default function App() {
   const [rawData, setRawData] = useState<string[][]>([]);
   
-  // State lưu cấu hình ID
+  // State lưu cấu hình ID & URL
   const [sheetId, setSheetId] = useState<string>(() => localStorage.getItem('SHEET_ID') || DEFAULT_SHEET_ID);
   const [voucherFolderId, setVoucherFolderId] = useState<string>(() => localStorage.getItem('VOUCHER_FOLDER_ID') || DEFAULT_VOUCHER_ID);
   const [docFolderId, setDocFolderId] = useState<string>(() => localStorage.getItem('DOC_FOLDER_ID') || DEFAULT_DOC_ID);
-  
+  const [scriptUrl, setScriptUrl] = useState<string>(() => localStorage.getItem('SCRIPT_URL') || '');
+
   const [selectedTicket, setSelectedTicket] = useState<string>('');
   
   // State mới để truyền từ khóa tìm kiếm sang tab chứng từ
@@ -72,7 +75,13 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard'); // Default to Dashboard
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+      // Logic khởi tạo viewMode: nếu đã lưu admin persist -> dashboard, ngược lại kiểm tra session
+      if (localStorage.getItem('IS_ADMIN_PERSIST') === 'true' || sessionStorage.getItem('IS_ADMIN') === 'true') {
+          return 'dashboard';
+      }
+      return 'lookup';
+  });
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
@@ -80,13 +89,26 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [newPin, setNewPin] = useState('');
 
   useEffect(() => {
+    // Check both session and persistent storage
     const sessionAuth = sessionStorage.getItem('IS_ADMIN');
-    if (sessionAuth === 'true') {
-      setIsAdmin(true);
+    const localAuth = localStorage.getItem('IS_ADMIN_PERSIST');
+
+    if (sessionAuth === 'true' || localAuth === 'true') {
+      if (!isAdmin) setIsAdmin(true);
+      if (localAuth === 'true' && sessionAuth !== 'true') {
+           sessionStorage.setItem('IS_ADMIN', 'true'); // Sync session
+      }
+    } else {
+        if (isAdmin) setIsAdmin(false);
+        // If not admin and current view is restricted, redirect to lookup
+        if (['dashboard', 'warehouse-in', 'warehouse-out', 'report', 'master'].includes(viewMode)) {
+            setViewMode('lookup');
+        }
     }
-  }, []);
+  }, [isAdmin, viewMode]);
   
   const handleLoadData = async (targetSheetId: string = sheetId) => {
     const idToUse = targetSheetId.trim() || DEFAULT_SHEET_ID;
@@ -97,6 +119,7 @@ export default function App() {
     setIsLoading(true);
     setConnectionError(null);
     try {
+      // 1. Fetch Dữ liệu chính
       const data = await fetchGoogleSheetData(idToUse, 'DULIEU');
       if (data && Array.isArray(data) && data.length > 0) {
         setRawData(data);
@@ -105,6 +128,24 @@ export default function App() {
         setRawData([]);
         setConnectionError("Sheet 'DULIEU' không có dữ liệu hoặc tên Sheet không đúng.");
       }
+
+      // 2. TỰ ĐỘNG LẤY SCRIPT URL TỪ SHEET 'DMDC!A2'
+      // Request range A1:A2. GVIZ coi A1 là header, A2 là data row 0.
+      try {
+          const configData = await fetchGoogleSheetData(idToUse, 'DMDC!A1:A2');
+          if (configData && configData.length > 0 && configData[0][0]) {
+              const fetchedUrl = configData[0][0].trim();
+              if (fetchedUrl.startsWith('http')) {
+                  console.log("Đã tự động cập nhật Script URL từ DMDC!A2");
+                  setScriptUrl(fetchedUrl);
+                  localStorage.setItem('SCRIPT_URL', fetchedUrl);
+              }
+          }
+      } catch (configErr) {
+          console.warn("Không tìm thấy Script URL tại DMDC!A2", configErr);
+          // Không báo lỗi chặn UI, dùng fallback hoặc url đã lưu
+      }
+
     } catch (err: any) {
       setConnectionError(err.message || "Không thể kết nối đến Google Sheet.");
     } finally {
@@ -120,24 +161,41 @@ export default function App() {
     localStorage.setItem('SHEET_ID', sheetId);
     localStorage.setItem('VOUCHER_FOLDER_ID', voucherFolderId);
     localStorage.setItem('DOC_FOLDER_ID', docFolderId);
+    localStorage.setItem('SCRIPT_URL', scriptUrl); // Save Script URL
+    
+    // Save new PIN if provided
+    if (newPin && newPin.trim().length >= 4) {
+        localStorage.setItem('ADMIN_PIN', newPin.trim());
+        alert("Đã cập nhật cấu hình và mã PIN thành công!");
+    } else if (newPin && newPin.trim().length < 4) {
+        alert("Mã PIN phải có ít nhất 4 ký tự.");
+        return;
+    }
+
     handleLoadData(sheetId);
     setShowSettings(false);
+    setNewPin('');
   };
 
   const handleSettingsClick = () => {
     if (isAdmin) {
+      setNewPin(''); // Reset pin input when opening
       setShowSettings(true);
     } else {
       setShowLogin(true);
     }
   };
 
-  const handleLogin = (pin: string) => {
-    if (pin === ADMIN_PIN) {
+  const handleLogin = (pin: string, remember: boolean = false) => {
+    const currentPin = localStorage.getItem('ADMIN_PIN') || DEFAULT_ADMIN_PIN;
+    if (pin === currentPin) {
       setIsAdmin(true);
       sessionStorage.setItem('IS_ADMIN', 'true');
+      if (remember) {
+          localStorage.setItem('IS_ADMIN_PERSIST', 'true');
+      }
+      setViewMode('dashboard'); // Redirect to dashboard on login
       setShowLogin(false);
-      setShowSettings(true); 
       return true;
     }
     return false;
@@ -146,7 +204,9 @@ export default function App() {
   const handleLogout = () => {
     setIsAdmin(false);
     sessionStorage.removeItem('IS_ADMIN');
+    localStorage.removeItem('IS_ADMIN_PERSIST'); // Clear persistent auth
     setShowSettings(false);
+    setViewMode('lookup'); // Redirect to public view
   };
 
   // Handler khi click vào số phiếu ở trang Tra cứu -> Chuyển sang Kho Chứng Từ
@@ -265,28 +325,30 @@ export default function App() {
                 <Database className="w-6 h-6" />
              </div>
              <div>
-                <h1 className="text-base font-bold text-white tracking-tight">QR Master</h1>
-                <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase">V.2.0 Enterprise</p>
+                <h1 className="text-sm font-bold text-white tracking-tight leading-tight">Quản lý kho <br/> thiết bị</h1>
+                <p className="text-[10px] text-slate-400 font-medium tracking-wide uppercase mt-1">V.2.0 Enterprise</p>
              </div>
          </div>
 
          <nav className="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
-             <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-2 tracking-wider">Tổng Quan</div>
-             <SidebarItem mode="dashboard" icon={LayoutDashboard} label="Dashboard" />
-             <SidebarItem mode="report" icon={BarChart3} label="Báo Cáo Tồn" />
+             {isAdmin && (
+                 <>
+                    <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-2 tracking-wider flex items-center gap-2">
+                        <Lock className="w-3 h-3"/> Quản Trị
+                    </div>
+                    <SidebarItem mode="dashboard" icon={LayoutDashboard} label="Dashboard" />
+                    <SidebarItem mode="report" icon={BarChart3} label="Báo Cáo Tồn" />
+                    <SidebarItem mode="warehouse-in" icon={FileInput} label="Nhập Kho" />
+                    <SidebarItem mode="warehouse-out" icon={FileOutput} label="Xuất Kho" />
+                    <SidebarItem mode="master" icon={List} label="Danh Mục" />
+                 </>
+             )}
              
-             <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-4 tracking-wider">Kho Vận</div>
-             <SidebarItem mode="warehouse-in" icon={FileInput} label="Nhập Kho" />
-             <SidebarItem mode="warehouse-out" icon={FileOutput} label="Xuất Kho" />
-             
-             <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-4 tracking-wider">Tiện Ích</div>
+             <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-4 tracking-wider">Tiện Ích & Dữ Liệu</div>
              <SidebarItem mode="print" icon={QrCode} label="In Tem QR" />
              <SidebarItem mode="lookup" icon={SearchIcon} label="Tra Cứu" />
-             
-             <div className="text-[10px] font-bold text-slate-500 uppercase px-4 mb-2 mt-4 tracking-wider">Dữ Liệu</div>
              <SidebarItem mode="vouchers" icon={FileText} label="Kho Chứng Từ" />
              <SidebarItem mode="drive" icon={FolderOpen} label="Tài Liệu KT" />
-             <SidebarItem mode="master" icon={List} label="Danh Mục" />
          </nav>
 
          <div className="p-4 border-t border-slate-800/50">
@@ -301,7 +363,7 @@ export default function App() {
                    <Settings className={`w-4 h-4 ${isAdmin ? 'animate-spin-slow' : ''}`} />
                 </div>
                 <div className="flex-1 text-left">
-                    <div className="text-sm font-medium">{isAdmin ? 'Admin' : 'Cấu hình'}</div>
+                    <div className="text-sm font-medium">{isAdmin ? 'Admin' : 'Đăng nhập'}</div>
                     <div className="text-[10px] opacity-60 truncate">{isAdmin ? 'Đã đăng nhập' : 'Yêu cầu quyền'}</div>
                 </div>
             </button>
@@ -312,7 +374,7 @@ export default function App() {
       <div className="md:hidden fixed top-0 left-0 right-0 bg-slate-900 z-50 px-4 py-3 flex items-center justify-between shadow-md no-print">
          <div className="flex items-center gap-2 text-white">
              <Database className="w-6 h-6 text-blue-500" />
-             <span className="font-bold">QR Master</span>
+             <span className="font-bold text-sm">Quản lý kho thiết bị</span>
          </div>
          <button onClick={() => setMobileMenuOpen(true)} className="text-slate-300">
              <Menu className="w-6 h-6" />
@@ -332,20 +394,27 @@ export default function App() {
                      <button onClick={() => setMobileMenuOpen(false)}><X className="w-6 h-6 text-slate-400" /></button>
                  </div>
                  <div className="space-y-2 flex-1 overflow-y-auto">
-                     <SidebarItem mode="dashboard" icon={LayoutDashboard} label="Dashboard" />
-                     <SidebarItem mode="report" icon={BarChart3} label="Báo Cáo Tồn" />
-                     <SidebarItem mode="warehouse-in" icon={FileInput} label="Nhập Kho" />
-                     <SidebarItem mode="warehouse-out" icon={FileOutput} label="Xuất Kho" />
+                     {isAdmin && (
+                         <>
+                             <div className="text-xs font-bold text-slate-500 uppercase px-2 mb-1">Quản trị</div>
+                             <SidebarItem mode="dashboard" icon={LayoutDashboard} label="Dashboard" />
+                             <SidebarItem mode="report" icon={BarChart3} label="Báo Cáo Tồn" />
+                             <SidebarItem mode="warehouse-in" icon={FileInput} label="Nhập Kho" />
+                             <SidebarItem mode="warehouse-out" icon={FileOutput} label="Xuất Kho" />
+                             <SidebarItem mode="master" icon={List} label="Danh Mục" />
+                             <div className="my-2 border-t border-slate-800"></div>
+                         </>
+                     )}
+                     <div className="text-xs font-bold text-slate-500 uppercase px-2 mb-1">Tiện ích</div>
                      <SidebarItem mode="print" icon={QrCode} label="In Tem QR" />
                      <SidebarItem mode="lookup" icon={SearchIcon} label="Tra Cứu" />
                      <SidebarItem mode="vouchers" icon={FileText} label="Kho Chứng Từ" />
                      <SidebarItem mode="drive" icon={FolderOpen} label="Tài Liệu KT" />
-                     <SidebarItem mode="master" icon={List} label="Danh Mục" />
                  </div>
                  <div className="pt-4 border-t border-slate-800">
                      <button onClick={handleSettingsClick} className="flex items-center gap-3 text-slate-400 px-4 py-2 w-full">
                          <Settings className="w-5 h-5" />
-                         <span>Cấu hình hệ thống</span>
+                         <span>{isAdmin ? 'Cấu hình Admin' : 'Đăng nhập Admin'}</span>
                      </button>
                  </div>
              </div>
@@ -368,8 +437,8 @@ export default function App() {
                     </span>
                  </div>
                  <div className="h-8 w-[1px] bg-slate-200"></div>
-                 <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs border-2 border-white shadow-sm ring-2 ring-blue-50">
-                    AD
+                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border-2 border-white shadow-sm ring-2 ${isAdmin ? 'bg-green-100 text-green-600 ring-green-50' : 'bg-slate-100 text-slate-600 ring-slate-50'}`}>
+                    {isAdmin ? 'AD' : 'GS'}
                  </div>
             </div>
          </header>
@@ -401,6 +470,23 @@ export default function App() {
                         <button onClick={() => setShowSettings(false)}><X className="w-5 h-5 text-slate-400"/></button>
                     </div>
                     <div className="p-4 flex flex-col gap-4 max-h-[80vh] overflow-y-auto">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                             <label className="text-sm font-bold text-blue-700 mb-1 flex items-center gap-2">
+                                <Link className="w-4 h-4" />
+                                Script URL (Tự động từ Sheet)
+                             </label>
+                             <input 
+                                value={scriptUrl}
+                                onChange={(e) => setScriptUrl(e.target.value)}
+                                placeholder="Tự động lấy từ DMDC!A2..."
+                                className="w-full p-2 border border-blue-300 rounded font-mono text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                                readOnly={true}
+                            />
+                            <p className="text-[10px] text-blue-500 mt-1">
+                                URL này được tự động lấy từ ô <b>A2</b> của sheet <b>DMDC</b>. Hãy cập nhật trong file Sheet nếu muốn thay đổi.
+                            </p>
+                        </div>
+
                         <div>
                             <label className="text-sm font-medium text-slate-700 mb-1 block">Google Sheet ID (Dữ liệu)</label>
                             <input 
@@ -426,10 +512,28 @@ export default function App() {
                                 className="w-full p-2 border border-red-200 bg-red-50 rounded font-mono text-sm focus:ring-2 focus:ring-red-500 outline-none"
                             />
                         </div>
+                        
+                        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                             <label className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
+                                <KeyRound className="w-4 h-4" />
+                                Đổi mã PIN Admin
+                             </label>
+                             <input 
+                                type="text"
+                                placeholder="Nhập PIN mới (Để trống nếu không đổi)"
+                                value={newPin}
+                                onChange={(e) => setNewPin(e.target.value)}
+                                className="w-full p-2 border border-slate-300 rounded font-mono text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                            <p className="text-[10px] text-slate-400 mt-1 italic">Lưu ý: Mã PIN sẽ được lưu trên trình duyệt này.</p>
+                        </div>
+
                         <div className="pt-2 flex gap-2">
-                            <button onClick={handleLogout} className="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300 flex items-center justify-center gap-2">
-                                <LogOut className="w-4 h-4" /> Đăng xuất
-                            </button>
+                            {isAdmin && (
+                                <button onClick={handleLogout} className="flex-1 py-2 bg-slate-200 text-slate-700 rounded-lg font-medium hover:bg-slate-300 flex items-center justify-center gap-2">
+                                    <LogOut className="w-4 h-4" /> Đăng xuất
+                                </button>
+                            )}
                             <button onClick={handleSaveConfig} className="flex-[2] py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-md shadow-blue-500/20">
                                 Lưu & Cập nhật
                             </button>
@@ -440,29 +544,29 @@ export default function App() {
             )}
 
             {/* VIEWS */}
-            {viewMode === 'dashboard' && (
+            {viewMode === 'dashboard' && isAdmin && (
                 <DashboardHome data={parsedData} lastUpdated={lastUpdated} onNavigate={setViewMode} />
             )}
 
-            {viewMode === 'warehouse-in' && (
+            {viewMode === 'warehouse-in' && isAdmin && (
                <div className="h-full animate-in fade-in duration-300">
-                  <WarehouseForm type="import" sheetId={sheetId} />
+                  <WarehouseForm type="import" sheetId={sheetId} scriptUrl={scriptUrl} />
                </div>
             )}
 
-            {viewMode === 'warehouse-out' && (
+            {viewMode === 'warehouse-out' && isAdmin && (
                <div className="h-full animate-in fade-in duration-300">
-                  <WarehouseForm type="export" sheetId={sheetId} />
+                  <WarehouseForm type="export" sheetId={sheetId} scriptUrl={scriptUrl} />
                </div>
             )}
 
-            {viewMode === 'report' && (
+            {viewMode === 'report' && isAdmin && (
                 <div className="h-full animate-in fade-in duration-300">
                    <InventoryReport data={parsedData} isLoading={isLoading} />
                 </div>
             )}
 
-            {viewMode === 'master' && (
+            {viewMode === 'master' && isAdmin && (
                 <div className="h-full animate-in fade-in duration-300">
                    <MasterData />
                 </div>

@@ -20,6 +20,29 @@ interface InventoryItem {
   history: DeviceRow[]; // Keep reference to rows for detailed view
 }
 
+// Helper: Format Date dd/mm/yyyy handling Google Sheets format
+const formatDate = (input: string): string => {
+  if (!input) return '';
+  try {
+    // Handle Google Sheets JSON date format "Date(year, month, day)"
+    // Month is 0-indexed in this format
+    if (input.includes('Date(')) {
+        const parts = input.match(/\d+/g);
+        if (parts && parts.length >= 3) {
+            const d = new Date(Number(parts[0]), Number(parts[1]), Number(parts[2]));
+            return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+        }
+    }
+    // Handle standard date strings
+    const d = new Date(input);
+    if (isNaN(d.getTime())) return input; 
+    
+    return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  } catch {
+    return input;
+  }
+};
+
 // History Modal Component
 const InventoryHistoryModal: React.FC<{ 
   item: InventoryItem, 
@@ -47,7 +70,7 @@ const InventoryHistoryModal: React.FC<{
                          <th className="px-4 py-3">Ngày</th>
                          <th className="px-4 py-3">Số Phiếu</th>
                          <th className="px-4 py-3">Loại</th>
-                         <th className="px-4 py-3">Đối Tác</th>
+                         <th className="px-4 py-3">Nhà cung cấp/ Khoa phòng</th>
                          <th className="px-4 py-3 text-right">SL</th>
                          <th className="px-4 py-3"></th>
                      </tr>
@@ -55,7 +78,8 @@ const InventoryHistoryModal: React.FC<{
                  <tbody className="divide-y divide-slate-100">
                      {item.history.map((row, idx) => {
                          const isImport = !row.ticketNumber.toUpperCase().startsWith('PX');
-                         const date = row.fullData[5] ? new Date(row.fullData[5]).toLocaleDateString('vi-VN') : '--';
+                         // Sử dụng hàm formatDate để xử lý cột F (index 5)
+                         const date = formatDate(row.fullData[5]);
                          const qty = parseFloat(row.fullData[14]) || 1;
                          
                          return (
