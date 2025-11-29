@@ -1,43 +1,49 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   FileText, Image as ImageIcon, File, User, 
-  Search, RefreshCw, ExternalLink, Settings, AlertCircle, 
-  CheckCircle2, Loader2, Grid, List, Eye, X, Download, Printer, Calendar
+  Search, RefreshCw, Settings, AlertCircle, 
+  Loader2, Eye, X, Download, Printer, Calendar, FolderOpen, ChevronRight
 } from 'lucide-react';
 import { DriveFile } from '../types';
-import { fetchDriveFiles, formatFileSize, getFileIcon, getDownloadLink } from '../services/driveService';
+import { fetchDriveFiles, formatFileSize, getFileIcon, getDownloadLink, getPrintSource } from '../services/driveService';
 
-// URL API CỐ ĐỊNH (Đã được cung cấp)
 const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbyqEtmuL0lOwh_Iibgs7oxx0lSC1HG1ubNcPc6KINu8a-aC3adsK9qTRj9LCjX4z7iq/exec";
 
 interface DriveFileBrowserProps {
   folderId: string;
   title: string;
   description: string;
+  initialSearch?: string;
 }
 
-export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, title, description }) => {
+export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, title, description, initialSearch }) => {
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [searchTerm, setSearchTerm] = useState(initialSearch || '');
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
-  
-  // URL Script
+  const [isPrinting, setIsPrinting] = useState(false);
+  const printFrameRef = useRef<HTMLIFrameElement>(null);
   const [scriptUrl, setScriptUrl] = useState(DEFAULT_API_URL);
   const [showConfig, setShowConfig] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Tiêu đề cột động
+  // Sync initialSearch if it changes from parent
+  useEffect(() => {
+    if (initialSearch) {
+        setSearchTerm(initialSearch);
+    }
+  }, [initialSearch]);
+
   const isVoucher = title.toLowerCase().includes('chứng từ');
-  const nameHeader = isVoucher ? "TÊN CHỨNG TỪ" : "TÊN TÀI LIỆU";
-  const colorTheme = isVoucher ? "text-emerald-600" : "text-blue-600";
-  const bgTheme = isVoucher ? "bg-emerald-50" : "bg-blue-50";
+  // Color themes
+  const accentColor = isVoucher ? 'text-emerald-600' : 'text-blue-600';
+  const bgColor = isVoucher ? 'bg-emerald-50' : 'bg-blue-50';
+  const borderColor = isVoucher ? 'border-emerald-100' : 'border-blue-100';
+  const ringColor = isVoucher ? 'focus:ring-emerald-500/20' : 'focus:ring-blue-500/20';
 
   const loadFiles = async () => {
     if (!folderId) return;
-    
     setLoading(true);
     setError(null);
     setSelectedFile(null);
@@ -56,7 +62,6 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
     loadFiles();
   }, [folderId, scriptUrl]);
 
-  // LOGIC TÌM KIẾM CLIENT-SIDE
   const filteredFiles = useMemo(() => {
     if (!searchTerm) return files;
     const lowerTerm = searchTerm.toLowerCase();
@@ -76,244 +81,192 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
   };
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '--/--/----';
+    if (!dateStr) return '--/--';
     try {
       const d = new Date(dateStr);
-      // Format DD/MM/YYYY HH:mm
+      if (isNaN(d.getTime())) return dateStr;
       return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
     } catch { return dateStr; }
   };
 
-  // Tạo link preview nhúng (thay /view bằng /preview)
   const getPreviewLink = (link: string) => {
     if (!link) return '';
     return link.replace('/view', '/preview');
   };
 
-  return (
-    <div className="h-full flex flex-col bg-slate-50/50">
-      {/* HEADER & TOOLBAR */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col gap-4 shadow-sm shrink-0">
-         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg ${bgTheme} ${colorTheme} border border-slate-100`}>
-                    {isVoucher ? <FileText className="w-6 h-6" /> : <File className="w-6 h-6" />}
-                </div>
-                <div>
-                    <h2 className="text-lg font-bold text-slate-800 leading-tight uppercase">{title}</h2>
-                    <p className="text-xs text-slate-500">{description}</p>
-                </div>
-            </div>
+  const handlePrint = () => {
+    if (!selectedFile) return;
+    setIsPrinting(true);
+    const printUrl = getPrintSource(selectedFile);
+    const isImage = selectedFile.mimeType.includes('image');
 
-            {/* Search Bar */}
-            <div className="flex items-center gap-2 w-full md:w-auto">
-                <div className="relative flex-1 md:w-80 group">
-                    <input 
-                        type="text" 
-                        placeholder="Tìm kiếm tài liệu..." 
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-                    />
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 group-focus-within:text-blue-500" />
-                    {searchTerm && (
-                        <button onClick={() => setSearchTerm('')} className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600">
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
-                <button 
-                    onClick={loadFiles}
-                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-slate-50 rounded-lg transition-colors"
-                    title="Làm mới"
-                >
-                    <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-                 <button 
-                    onClick={() => setShowConfig(!showConfig)}
-                    className={`p-2 rounded-lg transition-colors ${showConfig ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-slate-600'}`}
-                    title="Cài đặt"
-                >
-                    <Settings className="w-5 h-5" />
-                </button>
+    if (isImage && printFrameRef.current) {
+        const iframe = printFrameRef.current;
+        const doc = iframe.contentWindow?.document;
+        if (doc) {
+            doc.open();
+            doc.write(`<html><body style="margin:0;display:flex;justify-content:center;height:100vh;"><img src="${printUrl}" onload="setTimeout(()=>window.print(),500)" style="max-width:100%;height:auto;"/></body></html>`);
+            doc.close();
+            setTimeout(() => setIsPrinting(false), 3000);
+            return;
+        }
+    }
+    const w = 1000, h = 800;
+    const l = (window.screen.width - w) / 2;
+    const t = (window.screen.height - h) / 2;
+    window.open(printUrl, 'PrintWindow', `width=${w},height=${h},top=${t},left=${l},scrollbars=yes`);
+    setIsPrinting(false);
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-slate-50/50 p-4 md:p-6 overflow-hidden">
+      <iframe ref={printFrameRef} className="hidden" title="Print Frame" />
+
+      {/* Modern Header */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 shrink-0">
+         <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm border ${bgColor} ${borderColor} ${accentColor}`}>
+                {isVoucher ? <FolderOpen className="w-6 h-6" /> : <File className="w-6 h-6" />}
+            </div>
+            <div>
+                <h2 className="text-xl font-bold text-slate-800 tracking-tight">{title}</h2>
+                <p className="text-sm text-slate-500 font-medium">{description}</p>
             </div>
          </div>
 
-         {/* Config Panel */}
-         {showConfig && (
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm animate-in slide-in-from-top-2">
-                <label className="block font-bold text-slate-700 mb-1">API Endpoint (Web App URL)</label>
-                <div className="flex gap-2">
-                    <input 
-                        value={scriptUrl}
-                        onChange={(e) => setScriptUrl(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-300 rounded font-mono text-xs"
-                    />
-                    <button onClick={loadFiles} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">
-                        Lưu
-                    </button>
-                </div>
-            </div>
-         )}
+         <div className="flex w-full md:w-auto gap-3 items-center">
+             <div className="relative flex-1 md:w-72 group">
+                 <input 
+                    type="text" 
+                    placeholder="Tìm kiếm file..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className={`w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 ${ringColor} transition-all shadow-sm outline-none`}
+                 />
+                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                 {searchTerm && <button onClick={() => setSearchTerm('')}><X className="w-4 h-4 absolute right-3 top-3 text-slate-400 hover:text-slate-600" /></button>}
+             </div>
+             <button onClick={loadFiles} className="p-2.5 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 text-slate-500 hover:text-slate-800 transition-colors shadow-sm">
+                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+             </button>
+             <button onClick={() => setShowConfig(!showConfig)} className={`p-2.5 rounded-xl border transition-colors shadow-sm ${showConfig ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+                 <Settings className="w-5 h-5" />
+             </button>
+         </div>
       </div>
 
-      {/* MAIN CONTENT - SPLIT VIEW */}
-      <div className="flex-1 overflow-hidden flex">
+      {showConfig && (
+        <div className="mb-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm animate-in slide-in-from-top-2">
+            <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">API Endpoint</label>
+            <div className="flex gap-2">
+                <input value={scriptUrl} onChange={(e) => setScriptUrl(e.target.value)} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono" />
+                <button onClick={loadFiles} className="px-4 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-900">Lưu</button>
+            </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex">
+          
           {/* File List */}
-          <div className={`flex-1 flex flex-col overflow-hidden bg-white transition-all duration-300 ${selectedFile ? 'w-1/2 border-r border-slate-200 hidden md:flex' : 'w-full'}`}>
-              {/* Table Header */}
-              <div className="flex items-center px-6 py-3 bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase sticky top-0 z-10">
-                  <div className="flex-1">{nameHeader}</div>
-                  <div className="w-40 text-right hidden sm:block">Ngày sửa</div>
-                  <div className="w-32 text-right hidden sm:block">Tác giả</div>
-                  <div className="w-10"></div>
+          <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${selectedFile ? 'hidden md:flex md:w-1/2 border-r border-slate-100' : 'w-full'}`}>
+              <div className="px-5 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between text-xs font-bold text-emerald-800 uppercase">
+                  <span>Tên File</span>
+                  <div className="flex gap-8 hidden sm:flex">
+                      <span className="w-24 text-right">Ngày tạo</span>
+                      <span className="w-24 text-right">Người sửa</span>
+                  </div>
               </div>
 
-              {/* List Body */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
                   {loading ? (
-                      <div className="flex flex-col items-center justify-center h-40 gap-2">
-                          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                          <span className="text-sm text-slate-400">Đang tải dữ liệu...</span>
+                      <div className="flex flex-col items-center justify-center h-64 gap-3 text-slate-400">
+                          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                          <p className="text-sm font-medium">Đang đồng bộ dữ liệu...</p>
                       </div>
                   ) : error ? (
-                      <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg m-4 border border-red-100">
-                          <AlertCircle className="w-10 h-10 mx-auto mb-2" />
-                          <p className="font-medium">Không thể tải dữ liệu</p>
-                          <p className="text-xs mt-1 opacity-80">{error}</p>
+                      <div className="flex flex-col items-center justify-center h-64 text-red-500 gap-2">
+                          <AlertCircle className="w-8 h-8" />
+                          <p className="font-medium">Lỗi tải dữ liệu</p>
+                          <p className="text-xs text-red-400 bg-red-50 px-2 py-1 rounded">{error}</p>
                       </div>
                   ) : filteredFiles.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-slate-400">
-                          <Search className="w-12 h-12 mb-2 opacity-20" />
-                          <p className="text-sm">Không tìm thấy kết quả nào</p>
+                      <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10">
+                          <FolderOpen className="w-12 h-12 mb-3 opacity-20" />
+                          <p className="text-sm">Không tìm thấy file nào</p>
                       </div>
                   ) : (
                       filteredFiles.map((file) => (
                           <div 
                               key={file.id}
                               onClick={() => setSelectedFile(file)}
-                              className={`group flex items-center px-4 py-3 rounded-lg cursor-pointer transition-all border border-transparent hover:border-slate-200 hover:shadow-sm ${selectedFile?.id === file.id ? 'bg-blue-50 border-blue-200' : 'hover:bg-white'}`}
+                              className={`group flex items-center px-3 py-3 rounded-xl cursor-pointer transition-all border border-transparent ${selectedFile?.id === file.id ? `${bgColor} ${borderColor}` : 'hover:bg-slate-50 hover:border-slate-100'}`}
                           >
                               <div className="flex-1 flex items-center gap-3 min-w-0">
-                                  <div className={`p-2 rounded-lg ${selectedFile?.id === file.id ? 'bg-white shadow-sm' : 'bg-slate-100 group-hover:bg-white group-hover:shadow-sm'}`}>
+                                  <div className={`p-2 rounded-lg ${selectedFile?.id === file.id ? 'bg-white shadow-sm' : 'bg-slate-100 group-hover:bg-white group-hover:shadow-sm transition-colors'}`}>
                                       {renderIcon(file.mimeType)}
                                   </div>
                                   <div className="min-w-0">
-                                      <p className={`text-sm font-medium truncate ${selectedFile?.id === file.id ? 'text-blue-700' : 'text-slate-700'}`}>
+                                      <p className={`text-sm font-semibold truncate ${selectedFile?.id === file.id ? 'text-slate-900' : 'text-slate-700'}`}>
                                           {file.name}
                                       </p>
-                                      <p className="text-xs text-slate-400 flex items-center gap-2">
-                                          <span>{formatFileSize(file.size)}</span>
-                                          <span className="sm:hidden">• {formatDate(file.modifiedTime)}</span>
+                                      <p className="text-[11px] text-slate-400 sm:hidden mt-0.5">
+                                          {formatFileSize(file.size)} • {formatDate(file.createdTime || file.modifiedTime)}
                                       </p>
                                   </div>
                               </div>
                               
-                              <div className="w-40 hidden sm:flex flex-col items-end justify-center text-right">
-                                  <span className="text-xs font-mono text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                     <Calendar className="w-3 h-3"/>
-                                     {formatDate(file.modifiedTime).split(' ')[0]}
-                                  </span>
+                              <div className="hidden sm:flex items-center gap-8 text-xs text-slate-500">
+                                  <span className="w-24 text-right font-mono text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">{formatDate(file.createdTime || file.modifiedTime).split(' ')[0]}</span>
+                                  <div className="w-24 flex items-center justify-end gap-1.5">
+                                      <User className="w-3 h-3 opacity-50" />
+                                      <span className="truncate max-w-[80px]" title={file.lastModifyingUser?.emailAddress}>{file.lastModifyingUser?.displayName || 'Admin'}</span>
+                                  </div>
                               </div>
 
-                              <div className="w-32 hidden sm:flex items-center justify-end text-right pl-4">
-                                  <span className="text-xs text-slate-500 truncate flex items-center gap-1 max-w-full" title={file.lastModifyingUser?.displayName}>
-                                      <User className="w-3 h-3 shrink-0" /> 
-                                      {file.lastModifyingUser?.displayName || 'User'}
-                                  </span>
-                              </div>
-
-                              <div className="w-10 flex justify-end">
-                                  {selectedFile?.id === file.id && (
-                                      <Eye className="w-4 h-4 text-blue-500" />
-                                  )}
+                              <div className="w-6 flex justify-end">
+                                   {selectedFile?.id === file.id && <ChevronRight className={`w-4 h-4 ${accentColor}`} />}
                               </div>
                           </div>
                       ))
                   )}
               </div>
-              
-              {/* Footer status */}
-              <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex justify-between">
-                  <span>Tổng: {filteredFiles.length} mục</span>
-                  {selectedFile && <span className="hidden sm:inline">Đang chọn: {selectedFile.name}</span>}
-              </div>
           </div>
 
-          {/* Preview Panel (Right Side / Full on Mobile) */}
+          {/* Preview Inspector */}
           {selectedFile && (
-              <div className="w-full md:w-1/2 bg-slate-100 border-l border-slate-200 flex flex-col animate-in slide-in-from-right-4 duration-200 absolute md:relative inset-0 z-20 md:z-0">
-                  {/* Toolbar */}
-                  <div className="px-4 py-3 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm z-10 gap-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <button 
-                             onClick={() => setSelectedFile(null)}
-                             className="md:hidden mr-2 p-1 hover:bg-slate-100 rounded"
-                          >
-                             <X className="w-5 h-5 text-slate-500"/>
-                          </button>
-                          <div className="p-1.5 bg-slate-100 rounded hidden sm:block">
-                              {renderIcon(selectedFile.mimeType)}
-                          </div>
+              <div className="w-full md:w-1/2 bg-slate-50 border-l border-slate-200 flex flex-col absolute md:relative inset-0 z-20 md:z-auto animate-in slide-in-from-right-10 duration-200">
+                  <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between shadow-sm z-10">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                          <button onClick={() => setSelectedFile(null)} className="md:hidden p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-500"/></button>
+                          <div className="p-1.5 bg-slate-100 rounded-lg border border-slate-200">{renderIcon(selectedFile.mimeType)}</div>
                           <div className="min-w-0">
-                              <h3 className="text-sm font-bold text-slate-800 truncate" title={selectedFile.name}>
-                                  {selectedFile.name}
-                              </h3>
-                              <p className="text-[10px] text-slate-500 truncate">
-                                 {selectedFile.lastModifyingUser?.displayName} • {formatDate(selectedFile.modifiedTime)}
-                              </p>
+                              <h3 className="text-sm font-bold text-slate-800 truncate">{selectedFile.name}</h3>
+                              <p className="text-[10px] text-slate-500 truncate">{formatFileSize(selectedFile.size)} • {formatDate(selectedFile.createdTime || selectedFile.modifiedTime)}</p>
                           </div>
                       </div>
-                      <div className="flex items-center gap-1 sm:gap-2">
-                          {/* Nút In */}
-                          <a 
-                              href={selectedFile.webViewLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 px-3 py-1.5 bg-white text-slate-700 hover:text-blue-700 hover:bg-blue-50 border border-slate-200 rounded-lg text-xs font-bold transition-all shadow-sm"
-                              title="Mở để In"
-                          >
-                              <Printer className="w-4 h-4" />
-                              <span className="hidden sm:inline">In ấn</span>
-                          </a>
-                          
-                          {/* Nút Tải Về */}
-                          <a 
-                              href={getDownloadLink(selectedFile)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-xs font-bold transition-all shadow-md shadow-blue-500/20"
-                              title="Tải về máy"
-                          >
-                              <Download className="w-4 h-4" />
-                              <span className="hidden sm:inline">Tải về</span>
-                          </a>
-
-                          {/* Nút Đóng */}
-                          <button 
-                              onClick={() => setSelectedFile(null)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1 hidden md:block"
-                          >
+                      <div className="flex items-center gap-2">
+                           <button onClick={handlePrint} disabled={isPrinting} className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="In">
+                              {isPrinting ? <Loader2 className="w-5 h-5 animate-spin"/> : <Printer className="w-5 h-5" />}
+                           </button>
+                           <a href={getDownloadLink(selectedFile)} target="_blank" rel="noreferrer" className="p-2 hover:bg-blue-50 hover:text-blue-600 rounded-lg text-slate-600 transition-colors" title="Tải về">
+                              <Download className="w-5 h-5" />
+                           </a>
+                           <button onClick={() => setSelectedFile(null)} className="hidden md:block p-2 hover:bg-red-50 hover:text-red-600 rounded-lg text-slate-400 transition-colors">
                               <X className="w-5 h-5" />
-                          </button>
+                           </button>
                       </div>
                   </div>
-
-                  <div className="flex-1 bg-slate-200 relative overflow-hidden">
-                      {/* Google Drive Embed Viewer */}
+                  
+                  <div className="flex-1 relative bg-slate-200 overflow-hidden">
                       <iframe 
                           src={getPreviewLink(selectedFile.webViewLink)}
                           className="w-full h-full border-0 bg-white"
-                          allow="autoplay"
                           title="Preview"
                       />
-                      
-                      {/* Loading overlay for iframe */}
-                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-slate-50 -z-10">
-                          <div className="flex flex-col items-center gap-2">
-                             <Loader2 className="w-8 h-8 text-slate-300 animate-spin" />
-                             <span className="text-xs text-slate-400">Đang tải bản xem trước...</span>
-                          </div>
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none -z-10 text-slate-400 flex-col gap-2">
+                          <Loader2 className="w-8 h-8 animate-spin" />
+                          <span className="text-xs font-medium">Đang tải bản xem trước...</span>
                       </div>
                   </div>
               </div>

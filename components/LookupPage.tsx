@@ -1,17 +1,20 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, Package, Calendar, Tag, FileText, ExternalLink, RefreshCw, Box } from 'lucide-react';
+import { Search, Package, RefreshCw, FileText, Box, Building2, Calendar, MapPin, ExternalLink, FolderSearch } from 'lucide-react';
 import { DeviceRow } from '../types';
+import { DeviceDetailModal } from './DeviceDetailModal';
 
 interface LookupPageProps {
   data: DeviceRow[];
   onReload: () => void;
   isLoading: boolean;
   lastUpdated: Date | null;
+  onTicketSelect?: (ticket: string) => void;
 }
 
-export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoading, lastUpdated }) => {
+export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoading, lastUpdated, onTicketSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDevice, setSelectedDevice] = useState<DeviceRow | null>(null);
 
   const filteredData = useMemo(() => {
     if (!searchTerm) return data;
@@ -20,113 +23,133 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
       row.ticketNumber.toLowerCase().includes(lowerTerm) ||
       row.deviceName.toLowerCase().includes(lowerTerm) ||
       row.modelSerial.toLowerCase().includes(lowerTerm) ||
-      row.department.toLowerCase().includes(lowerTerm)
+      row.department.toLowerCase().includes(lowerTerm) ||
+      row.provider.toLowerCase().includes(lowerTerm)
     );
   }, [data, searchTerm]);
 
   const displayData = filteredData.slice(0, 100);
 
   return (
-    <div className="h-full flex flex-col bg-slate-50 p-4 md:p-6 overflow-hidden">
-      {/* Search Header */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 mb-4 shrink-0">
-        <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
-              <Package className="w-8 h-8" />
+    <div className="h-full flex flex-col bg-slate-50 p-4 md:p-6 overflow-hidden relative">
+      {selectedDevice && (
+        <DeviceDetailModal 
+            device={selectedDevice} 
+            onClose={() => setSelectedDevice(null)} 
+        />
+      )}
+
+      {/* Professional Search Header */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6 shrink-0 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+        <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 shadow-sm border border-purple-100">
+               <Package className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-slate-800">Tra cứu thiết bị</h2>
-                <button
-                  onClick={onReload}
-                  disabled={isLoading}
-                  className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-600' : ''}`} />
-                </button>
-              </div>
-              <p className="text-sm text-slate-500 mt-0.5">
-                {data.length} dòng dữ liệu • Cập nhật: {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--'}
-              </p>
+               <h2 className="text-lg font-bold text-slate-800">Tra Cứu Tài Sản</h2>
+               <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                  <span className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full font-medium">
+                     <Box className="w-3 h-3" /> {data.length} thiết bị
+                  </span>
+                  <span className="flex items-center gap-1">
+                     <Calendar className="w-3 h-3" /> {lastUpdated ? lastUpdated.toLocaleTimeString() : '--:--'}
+                  </span>
+               </div>
             </div>
-          </div>
-          
-          <div className="relative w-full md:w-96 group">
-            <input
-              type="text"
-              placeholder="Tìm tên, model, số phiếu..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 border border-slate-200 bg-slate-50 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:bg-white focus:outline-none transition-all shadow-sm"
-            />
-            <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-3.5 group-focus-within:text-indigo-500 transition-colors" />
-          </div>
+        </div>
+
+        <div className="flex w-full md:w-auto gap-3 items-center">
+             <div className="relative flex-1 md:w-96 group">
+                <input
+                  type="text"
+                  placeholder="Tìm theo Tên, Model, Số phiếu..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 focus:bg-white focus:outline-none transition-all shadow-sm font-medium text-sm"
+                />
+                <Search className="w-5 h-5 text-slate-400 absolute left-3.5 top-3.5 group-focus-within:text-purple-500 transition-colors" />
+                {searchTerm && (
+                   <span className="absolute right-3 top-3.5 text-xs font-bold text-purple-600 bg-purple-100 px-1.5 rounded">
+                      {filteredData.length}
+                   </span>
+                )}
+             </div>
+             <button
+                onClick={onReload}
+                disabled={isLoading}
+                className="p-3 rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-purple-600 hover:border-purple-200 hover:bg-purple-50 transition-all shadow-sm active:scale-95"
+                title="Làm mới dữ liệu"
+              >
+                <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin text-purple-600' : ''}`} />
+              </button>
         </div>
       </div>
 
-      {/* Results Table */}
+      {/* Modern Table */}
       <div className="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-        <div className="overflow-auto flex-1">
-          <table className="w-full text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50/80 sticky top-0 z-10 backdrop-blur-sm">
+        <div className="overflow-auto flex-1 custom-scrollbar">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-emerald-50 sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%]">Số Phiếu (E)</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[30%]">Thiết Bị (B)</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[20%]">Model (M)</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[20%]">Bộ Phận (D)</th>
-                <th className="px-6 py-4 font-bold border-b border-slate-200 w-[15%] text-right">Mã QR (S)</th>
+                <th className="px-6 py-4 text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-100 w-[140px]">Số Phiếu</th>
+                <th className="px-6 py-4 text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-100">Thông tin thiết bị</th>
+                <th className="px-6 py-4 text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-100 w-[200px]">Bộ phận & Vị trí</th>
+                <th className="px-6 py-4 text-xs font-bold text-emerald-800 uppercase tracking-wider border-b border-emerald-100 w-[250px]">Nhà cung cấp / Nguồn</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayData.length > 0 ? (
                 displayData.map((row) => (
-                  <tr key={row.rowId} className="hover:bg-indigo-50/30 transition-colors group">
+                  <tr 
+                    key={row.rowId} 
+                    className="hover:bg-slate-50 transition-colors group cursor-pointer"
+                    onClick={() => setSelectedDevice(row)}
+                  >
                     <td className="px-6 py-4 align-top">
-                       <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-50 text-blue-700 font-bold text-sm border border-blue-100">
-                          <FileText className="w-4 h-4" />
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); onTicketSelect && onTicketSelect(row.ticketNumber); }}
+                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-mono text-sm font-bold shadow-sm hover:border-emerald-300 hover:text-emerald-700 hover:shadow-md transition-all group-hover/btn z-10 relative"
+                         title="Mở kho chứng từ"
+                       >
+                          <FolderSearch className="w-3.5 h-3.5 opacity-50" />
                           {row.ticketNumber}
-                        </span>
+                        </button>
                     </td>
                     <td className="px-6 py-4 align-top">
-                      <div className="font-bold text-slate-800 text-base mb-1">
+                      <div className="font-bold text-slate-800 text-base mb-1 group-hover:text-blue-700">
                         {row.deviceName}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                         <span className="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono border border-slate-200">
+                            {row.modelSerial || 'No Model'}
+                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4 align-top">
-                      {row.modelSerial ? (
-                        <div className="font-mono text-sm text-slate-600">
-                          {row.modelSerial}
-                        </div>
-                      ) : (
-                        <span className="text-slate-300 text-sm italic">--</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 align-top">
-                       <div className="text-slate-700 text-sm">
-                          {row.department || '--'}
+                       <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                             <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                             {row.department || '--'}
+                          </div>
                        </div>
                     </td>
-                    <td className="px-6 py-4 align-top text-right">
-                       {row.qrContent && row.qrContent.startsWith('http') ? (
-                         <img src={row.qrContent} alt="QR" className="w-8 h-8 object-contain ml-auto border border-slate-200 rounded" />
-                       ) : (
-                         <span className="text-xs font-mono text-slate-400 truncate max-w-[100px] inline-block" title={row.qrContent}>
-                           {row.qrContent}
-                         </span>
-                       )}
+                    <td className="px-6 py-4 align-top">
+                       <div className="flex items-start gap-2 text-slate-600 text-sm">
+                          <Building2 className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                          <span className="line-clamp-2" title={row.provider}>{row.provider || '--'}</span>
+                       </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400">
-                      <div className="bg-slate-50 p-4 rounded-full mb-3">
-                        <Box className="w-8 h-8 text-slate-300" />
+                      <div className="bg-slate-50 p-6 rounded-full mb-4 border border-slate-100">
+                        <Search className="w-10 h-10 text-slate-300" />
                       </div>
-                      <p className="font-medium text-slate-500">Không tìm thấy dữ liệu</p>
-                      <p className="text-sm mt-1">Vui lòng kiểm tra Sheet ID và tên Sheet "DULIEU"</p>
+                      <h3 className="font-bold text-slate-600 text-lg">Không tìm thấy kết quả</h3>
+                      <p className="text-sm mt-1 text-slate-400">Thử tìm kiếm với từ khóa khác hoặc kiểm tra lại nguồn dữ liệu.</p>
                     </div>
                   </td>
                 </tr>
@@ -134,8 +157,13 @@ export const LookupPage: React.FC<LookupPageProps> = ({ data, onReload, isLoadin
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 flex justify-between items-center">
-          <span>Hiển thị {displayData.length} / {filteredData.length} kết quả</span>
+        <div className="px-6 py-3 bg-slate-50 border-t border-slate-200 text-xs font-medium text-slate-500 flex justify-between items-center">
+          <span>Hiển thị {displayData.length} trên tổng {filteredData.length} kết quả</span>
+          {filteredData.length > 100 && (
+              <span className="text-orange-500 bg-orange-50 px-2 py-0.5 rounded">
+                  Chỉ hiển thị 100 kết quả đầu tiên
+              </span>
+          )}
         </div>
       </div>
     </div>

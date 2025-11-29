@@ -143,7 +143,7 @@ export const MasterData: React.FC<MasterDataProps> = () => {
         {/* Table */}
         <div className="flex-1 overflow-auto">
             <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0 z-10 shadow-sm">
+                <thead className="bg-emerald-50 text-xs uppercase text-emerald-700 sticky top-0 z-10 shadow-sm border-b border-emerald-100">
                     <tr>
                         <th className="px-4 py-3 border-b w-12 text-center">STT</th>
                         {currentConfig.headers.map((h, i) => (

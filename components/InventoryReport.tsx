@@ -227,14 +227,14 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
       <div className="flex-1 bg-white border border-slate-200 border-t-0 rounded-b-2xl overflow-hidden flex flex-col shadow-sm">
         <div className="overflow-auto flex-1 relative">
           <table className="w-full text-left">
-            <thead className="text-xs text-slate-500 uppercase bg-slate-50 sticky top-0 z-20 shadow-sm">
+            <thead className="text-xs text-emerald-800 uppercase bg-emerald-50 sticky top-0 z-20 shadow-sm border-b border-emerald-100">
               <tr>
-                <th className="px-6 py-3 font-bold border-b border-slate-200 w-12 text-center">#</th>
-                <th className="px-6 py-3 font-bold border-b border-slate-200">Tên Thiết Bị</th>
-                <th className="px-6 py-3 font-bold border-b border-slate-200 w-1/4">Model / Quy cách</th>
-                <th className="px-6 py-3 font-bold border-b border-slate-200 w-32 text-right text-emerald-600">Tổng Nhập</th>
-                <th className="px-6 py-3 font-bold border-b border-slate-200 w-32 text-right text-orange-600">Tổng Xuất</th>
-                <th className="px-6 py-3 font-bold border-b border-slate-200 w-32 text-right text-indigo-700 bg-indigo-50/50">Tồn Kho</th>
+                <th className="px-6 py-3 font-bold w-12 text-center">#</th>
+                <th className="px-6 py-3 font-bold">Tên Thiết Bị</th>
+                <th className="px-6 py-3 font-bold w-1/4">Model / Quy cách</th>
+                <th className="px-6 py-3 font-bold w-32 text-right text-emerald-600">Tổng Nhập</th>
+                <th className="px-6 py-3 font-bold w-32 text-right text-orange-600">Tổng Xuất</th>
+                <th className="px-6 py-3 font-bold w-32 text-right text-indigo-700 bg-indigo-50/50">Tồn Kho</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

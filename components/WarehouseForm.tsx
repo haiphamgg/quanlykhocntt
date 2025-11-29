@@ -391,7 +391,7 @@ export const WarehouseForm: React.FC<WarehouseFormProps> = ({ type, sheetId }) =
       <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
         <div className="overflow-auto flex-1">
             <table className="w-full text-left text-sm">
-                <thead className="bg-slate-100 text-slate-500 font-semibold uppercase text-xs sticky top-0">
+                <thead className="bg-emerald-50 text-emerald-700 font-semibold uppercase text-xs sticky top-0 border-b border-emerald-100">
                     <tr>
                         <th className="p-3 w-10">#</th>
                         <th className="p-3">Mã TB</th>
