@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchGoogleSheetData, saveToGoogleSheet } from '../services/sheetService';
-import { Database, Plus, Save, RefreshCw, Search, Loader2, List, Tag, Building2, MapPin, Globe, Box, Edit2, X, Check } from 'lucide-react';
+import { Database, Plus, Save, RefreshCw, Search, Loader2, List, Tag, Building2, MapPin, Globe, Box, Edit2, X, Trash2, AlertCircle, Copy, Check, Lock, AlertTriangle } from 'lucide-react';
 
 // Cấu trúc Tab
 type TabID = 'DEVICE' | 'DEPT' | 'SECTION' | 'BRAND' | 'COUNTRY' | 'PROVIDER';
@@ -12,29 +12,30 @@ interface TabConfig {
   icon: any;
   sheet: string;
   range: string; 
-  columns: { header: string; placeholder: string; width?: string }[];
-  colIndex?: number;
-  padLeft?: number;
+  columns: { header: string; key: string; placeholder: string; width?: string }[];
+  colIndex?: number; // Cột để lưu trong DMDC (0=A, 1=B...)
   startRow: number;
+  padLeft?: number; // Số cột trống bên trái (cho Device)
 }
 
+// FIX: Range đổi từ 4 -> 3 để lấy cả Header, đảm bảo dòng 4 là dữ liệu
 const TABS: TabConfig[] = [
   {
     id: 'DEVICE',
     label: 'Danh Mục Thiết Bị',
     icon: Database,
     sheet: 'DANHMUC',
-    range: 'C4:I', 
+    range: 'C3:I', // Lấy từ dòng 3 để dòng 4 được tính là data
     padLeft: 2, 
     startRow: 4,
     columns: [
-      { header: 'Mã thiết bị (C)', placeholder: 'VD: MAY001', width: 'w-32' },
-      { header: 'Tên thiết bị (D)', placeholder: 'Nhập tên...', width: 'min-w-[200px]' },
-      { header: 'Chi tiết (E)', placeholder: 'Quy cách...', width: 'min-w-[150px]' },
-      { header: 'ĐVT (F)', placeholder: 'Cái/Bộ', width: 'w-20' },
-      { header: 'Hãng SX (G)', placeholder: 'Sony...', width: 'w-32' },
-      { header: 'Nước SX (H)', placeholder: 'Japan...', width: 'w-32' },
-      { header: 'Model (I)', placeholder: 'Model...', width: 'w-32' },
+      { key: 'code', header: 'Mã thiết bị (C)', placeholder: 'VD: MAY001', width: 'w-32' },
+      { key: 'name', header: 'Tên thiết bị (D)', placeholder: 'Nhập tên...', width: 'min-w-[200px]' },
+      { key: 'detail', header: 'Chi tiết (E)', placeholder: 'Quy cách...', width: 'min-w-[150px]' },
+      { key: 'unit', header: 'ĐVT (F)', placeholder: 'Cái/Bộ', width: 'w-20' },
+      { key: 'brand', header: 'Hãng SX (G)', placeholder: 'Sony...', width: 'w-32' },
+      { key: 'country', header: 'Nước SX (H)', placeholder: 'Japan...', width: 'w-32' },
+      { key: 'model', header: 'Model (I)', placeholder: 'Model...', width: 'w-32' },
     ]
   },
   {
@@ -42,9 +43,9 @@ const TABS: TabConfig[] = [
     label: 'Khoa Phòng (A)',
     icon: Building2,
     sheet: 'DMDC',
-    range: 'A4:A',
+    range: 'A3:A', // Lấy từ A3
     startRow: 4,
-    columns: [{ header: 'Tên Khoa / Phòng', placeholder: 'Nhập tên khoa...', width: 'w-full' }],
+    columns: [{ key: 'name', header: 'Tên Khoa / Phòng', placeholder: 'Nhập tên khoa...', width: 'w-full' }],
     colIndex: 0
   },
   {
@@ -52,9 +53,9 @@ const TABS: TabConfig[] = [
     label: 'Bộ Phận (B)',
     icon: MapPin,
     sheet: 'DMDC',
-    range: 'B4:B',
+    range: 'B3:B', // Lấy từ B3
     startRow: 4,
-    columns: [{ header: 'Tên Bộ Phận', placeholder: 'Nhập bộ phận...', width: 'w-full' }],
+    columns: [{ key: 'name', header: 'Tên Bộ Phận', placeholder: 'Nhập bộ phận...', width: 'w-full' }],
     colIndex: 1
   },
   {
@@ -62,9 +63,9 @@ const TABS: TabConfig[] = [
     label: 'Hãng SX (C)',
     icon: Tag,
     sheet: 'DMDC',
-    range: 'C4:C',
+    range: 'C3:C', // Lấy từ C3
     startRow: 4,
-    columns: [{ header: 'Tên Hãng', placeholder: 'Nhập hãng...', width: 'w-full' }],
+    columns: [{ key: 'name', header: 'Tên Hãng', placeholder: 'Nhập hãng...', width: 'w-full' }],
     colIndex: 2
   },
   {
@@ -72,9 +73,9 @@ const TABS: TabConfig[] = [
     label: 'Nước SX (D)',
     icon: Globe,
     sheet: 'DMDC',
-    range: 'D4:D',
+    range: 'D3:D', // Lấy từ D3
     startRow: 4,
-    columns: [{ header: 'Tên Nước', placeholder: 'Nhập nước...', width: 'w-full' }],
+    columns: [{ key: 'name', header: 'Tên Nước', placeholder: 'Nhập nước...', width: 'w-full' }],
     colIndex: 3
   },
   {
@@ -82,9 +83,9 @@ const TABS: TabConfig[] = [
     label: 'Nhà Cung Cấp (E)',
     icon: Box,
     sheet: 'DMDC',
-    range: 'E4:E',
+    range: 'E3:E', // Lấy từ E3
     startRow: 4,
-    columns: [{ header: 'Tên Nhà Cung Cấp', placeholder: 'Nhập NCC...', width: 'w-full' }],
+    columns: [{ key: 'name', header: 'Tên Nhà Cung Cấp', placeholder: 'Nhập NCC...', width: 'w-full' }],
     colIndex: 4
   }
 ];
@@ -98,134 +99,283 @@ interface MasterDataProps {
   scriptUrl?: string;
 }
 
-// Modal Component cho việc sửa Thiết bị
-const DeviceEditModal = ({ 
-    initialData, 
-    onClose, 
-    onSave, 
-    isSaving,
-    dropdowns 
-}: { 
-    initialData: string[], 
-    onClose: () => void, 
-    onSave: (data: string[]) => void, 
-    isSaving: boolean,
-    dropdowns: { units: string[], brands: string[], countries: string[] }
-}) => {
-    // Mapping index: 0:Ma, 1:Ten, 2:ChiTiet, 3:DVT, 4:Hang, 5:Nuoc, 6:Model
-    const [formData, setFormData] = useState({
-        code: initialData[0] || '',
-        name: initialData[1] || '',
-        detail: initialData[2] || '',
-        unit: initialData[3] || '',
-        brand: initialData[4] || '',
-        country: initialData[5] || '',
-        model: initialData[6] || ''
-    });
+// --- ERROR HELP MODAL ---
+const ScriptHelpModal = ({ onClose }: { onClose: () => void }) => {
+    const [copied, setCopied] = useState(false);
+    
+    // Updated code snippet: Added delete_master_item logic
+    const codeSnippet = `
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(10000);
 
-    const handleSave = () => {
-        if (!formData.name) {
-            alert("Tên thiết bị là bắt buộc");
-            return;
+  try {
+    var json = JSON.parse(e.postData.contents);
+    var action = json.action;
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // --- 1. TẠO PHIẾU NHẬP/XUẤT (Sheet DULIEU) ---
+    if (action === 'create_ticket') {
+      var sheet = ss.getSheetByName('DULIEU');
+      if (!sheet) sheet = ss.insertSheet('DULIEU');
+      
+      var rows = json.rows; // Array[][]
+      if (rows && rows.length > 0) {
+        var lastRow = sheet.getLastRow();
+        var startSTT = lastRow > 2 ? lastRow - 2 : 0;
+        if (startSTT < 0) startSTT = 0;
+
+        for (var i = 0; i < rows.length; i++) {
+          rows[i][0] = startSTT + i + 1; // Cột A: STT
+          
+          var qrInfo = "Tên thiết bị: " + rows[i][7] + "\\n" +
+                       "Nguồn/NCC: " + rows[i][2] + "\\n" +
+                       "Bộ phận: " + rows[i][3] + "\\n" +
+                       "Ngày: " + rows[i][5] + "\\n" + 
+                       "Model: " + rows[i][12] + "\\n" +
+                       "Bảo hành: " + rows[i][13];
+          
+          while(rows[i].length < 19) { rows[i].push(""); }
+          rows[i][18] = qrInfo;
         }
-        onSave([
-            formData.code, 
-            formData.name, 
-            formData.detail, 
-            formData.unit, 
-            formData.brand, 
-            formData.country, 
-            formData.model
-        ]);
+
+        sheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
+        return responseJSON({status: 'success', message: 'Đã tạo ' + rows.length + ' dòng phiếu.'});
+      }
+    }
+
+    // --- 2. QUẢN LÝ THIẾT BỊ (Sheet DANHMUC) ---
+    else if (action === 'add_master_device') {
+       var sheet = ss.getSheetByName('DANHMUC');
+       if (!sheet) sheet = ss.insertSheet('DANHMUC');
+       sheet.appendRow(json.row);
+       return responseJSON({status: 'success', message: 'Đã thêm thiết bị mới.'});
+    }
+    else if (action === 'update_master_device') {
+       var sheet = ss.getSheetByName('DANHMUC');
+       sheet.getRange(json.rowIndex, 1, 1, json.row.length).setValues([json.row]);
+       return responseJSON({status: 'success', message: 'Cập nhật thiết bị thành công'});
+    }
+
+    // --- 3. QUẢN LÝ DANH MỤC CHUNG (Sheet DMDC) ---
+    else if (action === 'add_master_dmdc') {
+       var sheet = ss.getSheetByName('DMDC');
+       if (!sheet) sheet = ss.insertSheet('DMDC');
+       var colIndex = json.colIndex;
+       var value = json.value;
+       
+       if (colIndex !== undefined && value) {
+          var colLetter = String.fromCharCode(65 + colIndex); 
+          var lastRowInCol = getLastRowSpecial(sheet, colLetter);
+          sheet.getRange(lastRowInCol + 1, colIndex + 1).setValue(value);
+          return responseJSON({status: 'success', message: 'Đã thêm vào cột ' + colLetter});
+       }
+       return responseJSON({status: 'error', message: 'Thiếu colIndex hoặc value'});
+    }
+    else if (action === 'update_master_dmdc') {
+       var sheet = ss.getSheetByName('DMDC');
+       sheet.getRange(json.rowIndex, json.colIndex + 1).setValue(json.value);
+       return responseJSON({status: 'success', message: 'Cập nhật danh mục thành công'});
+    }
+
+    // --- 4. XÓA DỮ LIỆU ---
+    else if (action === 'delete_master_item') {
+       var sheetName = json.sheetName;
+       var sheet = ss.getSheetByName(sheetName);
+       if (sheetName === 'DANHMUC') {
+         // Xóa cả dòng đối với thiết bị
+         sheet.deleteRow(json.rowIndex);
+       } else if (sheetName === 'DMDC') {
+         // Xóa ô và đẩy dữ liệu lên đối với danh mục cột
+         var range = sheet.getRange(json.rowIndex, json.colIndex + 1);
+         range.deleteCells(SpreadsheetApp.Dimension.ROWS);
+       }
+       return responseJSON({status: 'success', message: 'Đã xóa dữ liệu thành công.'});
+    }
+
+    return responseJSON({status: 'error', message: 'Action không hợp lệ: ' + action});
+
+  } catch (e) {
+    return responseJSON({status: 'error', message: e.toString()});
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// --- CÁC HÀM HỖ TRỢ ---
+function responseJSON(data) {
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function getLastRowSpecial(sheet, column) {
+  var lastRow = sheet.getLastRow();
+  var range = sheet.getRange(column + "1:" + column + lastRow);
+  var values = range.getValues();
+  for (var i = values.length - 1; i >= 0; i--) {
+    if (values[i][0] !== "" && values[i][0] !== null) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+`;
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(codeSnippet);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                        <Edit2 className="w-5 h-5 text-blue-600"/> Cập nhật thiết bị
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+                <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center shrink-0">
+                    <h3 className="font-bold text-amber-700 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5"/> Cần Cập Nhật Google Apps Script (Thêm tính năng Xóa)
                     </h3>
-                    <button onClick={onClose}><X className="w-5 h-5 text-slate-400 hover:text-red-500"/></button>
+                    <button onClick={onClose}><X className="w-5 h-5 text-amber-500 hover:text-amber-700"/></button>
                 </div>
-                
-                <div className="p-6 grid grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto">
-                    <div className="col-span-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Mã Thiết Bị</label>
-                        <input 
-                            value={formData.code} 
-                            onChange={e => setFormData({...formData, code: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded font-mono text-sm"
-                            placeholder="Tự động hoặc nhập..."
-                        />
+                <div className="p-6 overflow-y-auto custom-scrollbar">
+                    <p className="text-sm text-slate-700 mb-4 leading-relaxed">
+                        Bạn vừa yêu cầu thêm tính năng <b>Xóa</b>. Vui lòng thay thế lại toàn bộ hàm <code>doPost</code> trong file <b>Code.gs</b> để hệ thống hiểu lệnh xóa mới.
+                        <br/><br/>
+                        <b>QUAN TRỌNG:</b> Sau khi lưu, hãy nhấn <b>Deploy (Triển khai) {'>'} New Deployment (Bài triển khai mới)</b>. Nếu không làm bước này, lệnh xóa sẽ không hoạt động.
+                    </p>
+                    <div className="relative group">
+                        <pre className="bg-slate-900 text-green-400 p-4 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre-wrap border border-slate-700 shadow-inner h-96">
+                            {codeSnippet}
+                        </pre>
+                        <button 
+                            onClick={handleCopy}
+                            className="absolute top-3 right-3 p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors backdrop-blur-sm border border-white/10"
+                            title="Sao chép toàn bộ"
+                        >
+                            {copied ? <div className="flex items-center gap-1"><Check className="w-4 h-4 text-green-400"/> <span className="text-xs">Đã chép</span></div> : <Copy className="w-4 h-4"/>}
+                        </button>
                     </div>
-                    <div className="col-span-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Đơn Vị Tính</label>
-                        <input 
-                            list="dl-units-modal"
-                            value={formData.unit} 
-                            onChange={e => setFormData({...formData, unit: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded text-sm"
-                            placeholder="Cái/Bộ/Hộp"
-                        />
-                         <datalist id="dl-units-modal">{dropdowns.units.map((u, i) => <option key={i} value={u}/>)}</datalist>
-                    </div>
-                    <div className="col-span-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Tên Thiết Bị *</label>
-                        <input 
-                            value={formData.name} 
-                            onChange={e => setFormData({...formData, name: e.target.value})}
-                            className="w-full p-2 border border-blue-300 rounded text-sm font-semibold focus:ring-2 focus:ring-blue-500 outline-none"
-                            placeholder="Nhập tên thiết bị..."
-                        />
-                    </div>
-                    <div className="col-span-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Thông số / Chi tiết</label>
-                        <input 
-                            value={formData.detail} 
-                            onChange={e => setFormData({...formData, detail: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded text-sm"
-                        />
-                    </div>
-                    <div className="col-span-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Hãng SX</label>
-                        <input 
-                            list="dl-brands-modal"
-                            value={formData.brand} 
-                            onChange={e => setFormData({...formData, brand: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded text-sm"
-                        />
-                        <datalist id="dl-brands-modal">{dropdowns.brands.map((b, i) => <option key={i} value={b}/>)}</datalist>
-                    </div>
-                    <div className="col-span-1">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Nước SX</label>
-                        <input 
-                            list="dl-countries-modal"
-                            value={formData.country} 
-                            onChange={e => setFormData({...formData, country: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded text-sm"
-                        />
-                        <datalist id="dl-countries-modal">{dropdowns.countries.map((c, i) => <option key={i} value={c}/>)}</datalist>
-                    </div>
-                    <div className="col-span-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase block mb-1">Model</label>
-                        <input 
-                            value={formData.model} 
-                            onChange={e => setFormData({...formData, model: e.target.value})}
-                            className="w-full p-2 border border-slate-300 rounded text-sm"
-                        />
-                    </div>
+                </div>
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end shrink-0">
+                    <button onClick={onClose} className="px-5 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 shadow-lg shadow-slate-500/20 transition-all active:scale-95">
+                        Đóng
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- UNIFIED MODAL COMPONENT ---
+interface MasterModalProps {
+    isOpen: boolean;
+    mode: 'create' | 'edit';
+    tabConfig: TabConfig;
+    initialData?: string[];
+    onClose: () => void;
+    onSave: (data: string[]) => void;
+    isSaving: boolean;
+    dropdowns: { units: string[], brands: string[], countries: string[] };
+}
+
+const MasterModal: React.FC<MasterModalProps> = ({ isOpen, mode, tabConfig, initialData, onClose, onSave, isSaving, dropdowns }) => {
+    const [formValues, setFormValues] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            if (mode === 'edit' && initialData) {
+                setFormValues(initialData);
+            } else {
+                setFormValues(new Array(tabConfig.columns.length).fill(''));
+            }
+        }
+    }, [isOpen, mode, initialData, tabConfig]);
+
+    if (!isOpen) return null;
+
+    const handleChange = (index: number, value: string) => {
+        const newValues = [...formValues];
+        newValues[index] = value;
+        setFormValues(newValues);
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const nameIndex = tabConfig.id === 'DEVICE' ? 1 : 0;
+        if (!formValues[nameIndex]?.trim()) {
+            alert(`Vui lòng nhập ${tabConfig.columns[nameIndex].header}`);
+            return;
+        }
+        onSave(formValues);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className={`p-4 border-b border-slate-100 flex justify-between items-center ${mode === 'create' ? 'bg-blue-50' : 'bg-orange-50'}`}>
+                    <h3 className={`font-bold flex items-center gap-2 ${mode === 'create' ? 'text-blue-700' : 'text-orange-700'}`}>
+                        {mode === 'create' ? <Plus className="w-5 h-5"/> : <Edit2 className="w-5 h-5"/>}
+                        {mode === 'create' ? 'Thêm mới' : 'Cập nhật'} - {tabConfig.label}
+                    </h3>
+                    <button onClick={onClose} className="p-1 hover:bg-black/10 rounded transition-colors"><X className="w-5 h-5 text-slate-500"/></button>
                 </div>
 
+                <form onSubmit={handleSubmit} className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                    <div className="grid grid-cols-2 gap-4">
+                        {tabConfig.columns.map((col, idx) => {
+                            const isFullWidth = tabConfig.columns.length === 1 || col.key === 'name' || col.key === 'detail';
+                            let listId = undefined;
+                            if (col.key === 'unit') listId = 'dl-units-modal';
+                            if (col.key === 'brand') listId = 'dl-brands-modal';
+                            if (col.key === 'country') listId = 'dl-countries-modal';
+
+                            // LOGIC: Disable code input if in Edit mode
+                            const isLocked = mode === 'edit' && col.key === 'code';
+
+                            return (
+                                <div key={idx} className={isFullWidth ? 'col-span-2' : 'col-span-1'}>
+                                    <label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between mb-1.5">
+                                        <span>{col.header} {col.key === 'name' && <span className="text-red-500">*</span>}</span>
+                                        {isLocked && <Lock className="w-3 h-3 text-slate-400" />}
+                                    </label>
+                                    <input 
+                                        value={formValues[idx] || ''}
+                                        onChange={e => handleChange(idx, e.target.value)}
+                                        disabled={isLocked}
+                                        className={`w-full p-2.5 border rounded-lg text-sm outline-none transition-all ${
+                                            isLocked 
+                                                ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200' 
+                                                : col.key === 'name'
+                                                    ? 'border-blue-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 font-semibold' 
+                                                    : 'border-slate-300 focus:border-slate-500 focus:ring-2 focus:ring-slate-100'
+                                        }`}
+                                        placeholder={col.placeholder}
+                                        list={listId}
+                                        autoFocus={idx === 0 && !isLocked}
+                                        title={isLocked ? "Không thể sửa mã thiết bị để đảm bảo tính nhất quán" : ""}
+                                    />
+                                    {listId && (
+                                        <datalist id={listId}>
+                                            {listId === 'dl-units-modal' && dropdowns.units.map((u, i) => <option key={i} value={u}/>)}
+                                            {listId === 'dl-brands-modal' && dropdowns.brands.map((b, i) => <option key={i} value={b}/>)}
+                                            {listId === 'dl-countries-modal' && dropdowns.countries.map((c, i) => <option key={i} value={c}/>)}
+                                        </datalist>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </form>
+
                 <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
-                    <button onClick={onClose} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg">Hủy</button>
+                    <button onClick={onClose} className="px-4 py-2 text-slate-600 font-medium hover:bg-slate-200 rounded-lg transition-colors">Hủy bỏ</button>
                     <button 
-                        onClick={handleSave} 
+                        onClick={handleSubmit} 
                         disabled={isSaving}
-                        className="px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm"
+                        className={`px-4 py-2 text-white font-bold rounded-lg flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-70 ${
+                            mode === 'create' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-orange-500 hover:bg-orange-600'
+                        }`}
                     >
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-                        Lưu Thay Đổi
+                        {mode === 'create' ? 'Lưu dữ liệu' : 'Lưu thay đổi'}
                     </button>
                 </div>
             </div>
@@ -238,16 +388,17 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
   const [data, setData] = useState<RowData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // State cho inline edit
-  const [formData, setFormData] = useState<Record<number, string>>({});
-  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
-
-  // State cho Modal edit (Chỉ dùng cho DEVICE)
-  const [showDeviceModal, setShowDeviceModal] = useState(false);
-  const [deviceModalData, setDeviceModalData] = useState<RowData | null>(null);
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [editingRow, setEditingRow] = useState<RowData | null>(null);
   
+  // Error Help
+  const [showScriptHelp, setShowScriptHelp] = useState(false);
+
   // Dropdown data
   const [dropdowns, setDropdowns] = useState({
       units: [] as string[],
@@ -263,159 +414,213 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
     if (!sheetId) return;
 
     try {
-      // Load main table data
-      const result = await fetchGoogleSheetData(sheetId, `${activeConfig.sheet}!${activeConfig.range}`);
+      // Timeout safety for loadData as well
+      const result = await Promise.race([
+          fetchGoogleSheetData(sheetId, `${activeConfig.sheet}!${activeConfig.range}`),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout")), 15000))
+      ]) as string[][];
+
       const mappedData: RowData[] = result.map((row, idx) => ({
-        originalIndex: activeConfig.startRow + idx,
+        originalIndex: activeConfig.startRow + idx, 
         values: row
       })).filter(item => item.values.some(cell => cell && cell.trim() !== ''));
       setData(mappedData);
 
-      // Nếu đang ở tab DEVICE, load thêm DMDC để lấy dropdown
       if (activeConfig.id === 'DEVICE') {
-          // Lấy rộng hơn (A:E) để có đủ Brand/Country/Supplier
-          const dmdc = await fetchGoogleSheetData(sheetId, 'DMDC!A4:E'); 
-          
-          // Lấy unique Units từ danh sách device hiện tại (cột F = index 3 trong result)
-          const uSet = new Set<string>();
-          result.forEach(r => { if(r[3]) uSet.add(r[3]) }); 
+          try {
+            const dmdc = await fetchGoogleSheetData(sheetId, 'DMDC!A3:E'); 
+            const uSet = new Set<string>();
+            result.forEach(r => { if(r[3]) uSet.add(r[3]) }); 
 
-          const bSet = new Set<string>();
-          const cSet = new Set<string>();
-          
-          dmdc.forEach(r => {
-              // DMDC Structure: A=Dept(0), B=Section(1), C=Brand(2), D=Country(3), E=Supplier(4)
-              if(r[2]) bSet.add(r[2]); // Brand
-              if(r[3]) cSet.add(r[3]); // Country
-          });
+            const bSet = new Set<string>();
+            const cSet = new Set<string>();
+            dmdc.forEach(r => {
+                if(r[2]) bSet.add(r[2]); 
+                if(r[3]) cSet.add(r[3]); 
+            });
 
-          setDropdowns({
-              units: Array.from(uSet).sort(),
-              brands: Array.from(bSet).sort(),
-              countries: Array.from(cSet).sort()
-          });
+            setDropdowns({
+                units: Array.from(uSet).sort(),
+                brands: Array.from(bSet).sort(),
+                countries: Array.from(cSet).sort()
+            });
+          } catch (e) { console.warn("Cannot load dropdowns", e); }
       }
-
     } catch (e) {
       console.error(e);
-      setData([]);
+      // Don't clear data on error to avoid flashing empty state, just log
     } finally {
       setIsLoading(false);
-      setEditingRowIndex(null);
-      setFormData({});
     }
   };
 
   useEffect(() => {
     loadData();
-    setFormData({});
     setSearchTerm('');
-    setEditingRowIndex(null);
-    setShowDeviceModal(false);
+    setIsModalOpen(false);
   }, [activeTabId]);
 
+  const handleCreateClick = () => {
+      setModalMode('create');
+      setEditingRow(null);
+      setIsModalOpen(true);
+  };
+
   const handleEditClick = (row: RowData) => {
-    if (activeConfig.id === 'DEVICE') {
-        // Use Modal for Device
-        setDeviceModalData(row);
-        setShowDeviceModal(true);
-    } else {
-        // Use Inline for others
-        const newForm: Record<number, string> = {};
-        row.values.forEach((val, idx) => {
-            newForm[idx] = val;
-        });
-        setFormData(newForm);
-        setEditingRowIndex(row.originalIndex);
-    }
+      setModalMode('edit');
+      setEditingRow(row);
+      setIsModalOpen(true);
   };
 
-  const handleCancelInline = () => {
-    setEditingRowIndex(null);
-    setFormData({});
+  // CHECK DEPENDENCY TRƯỚC KHI XÓA
+  const checkUsageInDulieu = async (valueToCheck: string, colIndexInDulieu: number): Promise<boolean> => {
+     const sheetId = localStorage.getItem('SHEET_ID') || '';
+     if (!sheetId) return false;
+     try {
+         // OPTIMIZATION: Chỉ lấy cột cần kiểm tra trong DULIEU thay vì toàn bộ bảng
+         const colLetter = String.fromCharCode(65 + colIndexInDulieu); // Chỉ hoạt động tốt cho A-Z (0-25)
+         const range = `DULIEU!${colLetter}3:${colLetter}`;
+         
+         // Add timeout 10s
+         const colData = await Promise.race([
+             fetchGoogleSheetData(sheetId, range),
+             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout checking usage")), 10000))
+         ]) as string[][];
+         
+         // Duyệt qua từng dòng
+         for (let i = 0; i < colData.length; i++) {
+             // row là mảng 1 phần tử
+             const cellValue = colData[i][0];
+             if (cellValue && String(cellValue).trim().toLowerCase() === String(valueToCheck).trim().toLowerCase()) {
+                 return true; // Đã tìm thấy -> Đang được sử dụng
+             }
+         }
+         return false; // Không tìm thấy
+     } catch (e) {
+         console.error("Error checking dependency", e);
+         // Nếu lỗi fetch (ví dụ mạng hoặc timeout), không chặn xóa nhưng cảnh báo log
+         return false;
+     }
   };
 
-  const saveDeviceFromModal = async (newValues: string[]) => {
-      if (!deviceModalData) return;
+  const handleDeleteClick = async (row: RowData) => {
+      if (!scriptUrl) {
+          alert("Lỗi: Chưa có Script URL. Vui lòng kiểm tra cấu hình Admin hoặc ô A2 sheet DMDC.");
+          return;
+      }
+
+      if (!confirm(`Bạn có chắc chắn muốn xóa mục này?\nHành động này không thể hoàn tác.`)) {
+          return;
+      }
+
+      setDeletingId(row.originalIndex); 
+      try {
+          // 1. KIỂM TRA RÀNG BUỘC DỮ LIỆU
+          let isUsed = false;
+          let constraintMsg = "";
+
+          if (activeTabId === 'DEVICE') {
+              const deviceCode = row.values[0]; 
+              if (deviceCode) {
+                  isUsed = await checkUsageInDulieu(deviceCode, 6); 
+                  constraintMsg = `Mã thiết bị "${deviceCode}" đã phát sinh giao dịch xuất/nhập kho.`;
+              }
+          } else if (activeTabId === 'DEPT') {
+              isUsed = await checkUsageInDulieu(row.values[0], 3); 
+              constraintMsg = `Khoa/Phòng "${row.values[0]}" đang được sử dụng trong phiếu.`;
+          } else if (activeTabId === 'PROVIDER') {
+              isUsed = await checkUsageInDulieu(row.values[0], 2);
+              constraintMsg = `Nhà cung cấp "${row.values[0]}" đang có trong phiếu.`;
+          }
+
+          if (isUsed) {
+              alert(`KHÔNG THỂ XÓA!\n\n${constraintMsg}\nBạn cần xóa các phiếu liên quan trước.`);
+              setDeletingId(null);
+              return;
+          }
+
+          // 2. GỬI LỆNH XÓA (Add timeout 20s)
+          await Promise.race([
+              saveToGoogleSheet({
+                action: 'delete_master_item',
+                sheetName: activeConfig.sheet,
+                rowIndex: row.originalIndex,
+                colIndex: activeConfig.colIndex
+              }, scriptUrl),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout deleting item. Apps Script might be slow.")), 20000))
+          ]);
+
+          alert("Đã xóa thành công!");
+          loadData();
+      } catch (e: any) {
+          console.error("Delete Error:", e);
+          if (e.message.includes('Action không hợp lệ') || e.message.includes('không hợp lệ')) {
+              setShowScriptHelp(true);
+          } else {
+              alert("Lỗi khi xóa: " + e.message);
+          }
+      } finally {
+          setDeletingId(null);
+      }
+  };
+
+  const handleSaveData = async (values: string[]) => {
       setIsSaving(true);
       try {
-          const padding = Array(activeConfig.padLeft || 0).fill(''); 
-          const fullRow = [...padding, ...newValues];
-          
-          await saveToGoogleSheet({
-               action: 'update_master', 
-               sheetName: 'DANHMUC',
-               rowIndex: deviceModalData.originalIndex, 
-               row: fullRow
-          }, scriptUrl);
-          alert("Cập nhật thiết bị thành công!");
-          setShowDeviceModal(false);
-          setDeviceModalData(null);
-          loadData(); // reload
+          if (!scriptUrl) throw new Error("Missing Script URL");
+
+          if (activeConfig.id === 'DEVICE') {
+              const padding = Array(activeConfig.padLeft || 0).fill('');
+              const rowToSave = [...padding, ...values];
+
+              if (modalMode === 'create') {
+                  await saveToGoogleSheet({
+                      action: 'add_master_device', 
+                      sheetName: 'DANHMUC',
+                      row: rowToSave
+                  }, scriptUrl);
+              } else {
+                  if (!editingRow) return;
+                  await saveToGoogleSheet({
+                      action: 'update_master_device',  
+                      rowIndex: editingRow.originalIndex,
+                      row: rowToSave
+                  }, scriptUrl);
+              }
+          } else {
+              const valueToSave = values[0];
+              if (modalMode === 'create') {
+                  await saveToGoogleSheet({
+                      action: 'add_master_dmdc',
+                      sheetName: 'DMDC',
+                      colIndex: activeConfig.colIndex,
+                      value: valueToSave
+                  }, scriptUrl);
+              } else {
+                  if (!editingRow) return;
+                  await saveToGoogleSheet({
+                      action: 'update_master_dmdc', 
+                      rowIndex: editingRow.originalIndex,
+                      colIndex: activeConfig.colIndex,
+                      value: valueToSave
+                  }, scriptUrl);
+              }
+          }
+
+          alert(modalMode === 'create' ? "Thêm mới thành công!" : "Cập nhật thành công!");
+          setIsModalOpen(false);
+          loadData(); 
+
       } catch (e: any) {
-          alert("Lỗi: " + e.message);
+          console.error("Save Error:", e);
+          if (e.message.includes('Action không hợp lệ') || e.message.includes('không hợp lệ')) {
+              setShowScriptHelp(true);
+          } else {
+              alert("Lỗi: " + e.message);
+          }
       } finally {
           setIsSaving(false);
       }
-  }
-
-  const handleInlineSave = async (isNew: boolean = false) => {
-    setIsSaving(true);
-    try {
-      // Validate Col 0
-      if (!formData[0] && !isNew) { // Nếu add new thì validate sau
-        // logic existing
-      }
-
-      if (isNew && (!formData[0] || !formData[0].trim())) {
-         alert(`Vui lòng nhập ${activeConfig.columns[0].header}`);
-         setIsSaving(false);
-         return;
-      }
-
-      const inputData = activeConfig.columns.map((_, index) => formData[index] || '');
-
-      if (!isNew && editingRowIndex !== null) {
-        // UPDATE MODE (Only for Non-Device Tabs since Device uses Modal)
-        await saveToGoogleSheet({
-            action: 'update_master_cell',
-            sheetName: activeConfig.sheet,
-            rowIndex: editingRowIndex,
-            colIndex: activeConfig.colIndex,
-            value: formData[0]
-        }, scriptUrl);
-        alert("Cập nhật thành công!");
-        handleCancelInline();
-
-      } else {
-        // ADD NEW MODE
-        if (activeConfig.id === 'DEVICE') {
-          const padding = Array(activeConfig.padLeft || 0).fill(''); 
-          const rowToSave = [...padding, ...inputData];
-          
-          await saveToGoogleSheet({
-            action: 'add_master_device',
-            sheetName: 'DANHMUC',
-            row: rowToSave
-          }, scriptUrl);
-        } else {
-          await saveToGoogleSheet({
-            action: 'add_master_dmdc',
-            sheetName: 'DMDC',
-            colIndex: activeConfig.colIndex,
-            value: formData[0]
-          }, scriptUrl);
-        }
-        alert("Thêm mới thành công!");
-        setFormData({});
-      }
-
-      setTimeout(loadData, 1000); 
-    } catch (e: any) {
-      alert("Lỗi khi lưu: " + e.message);
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const filteredData = data.filter(row => 
@@ -424,15 +629,20 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
 
   return (
     <div className="h-full flex flex-col bg-slate-50 p-2 md:p-6">
-      {showDeviceModal && deviceModalData && (
-          <DeviceEditModal 
-             initialData={deviceModalData.values}
-             onClose={() => { setShowDeviceModal(false); setDeviceModalData(null); }}
-             onSave={saveDeviceFromModal}
-             isSaving={isSaving}
-             dropdowns={dropdowns}
-          />
-      )}
+      {/* Script Help Modal */}
+      {showScriptHelp && <ScriptHelpModal onClose={() => setShowScriptHelp(false)} />}
+      
+      {/* Edit/Create Modal */}
+      <MasterModal 
+          isOpen={isModalOpen}
+          mode={modalMode}
+          tabConfig={activeConfig}
+          initialData={editingRow?.values}
+          onClose={() => setIsModalOpen(false)}
+          onSave={handleSaveData}
+          isSaving={isSaving}
+          dropdowns={dropdowns}
+      />
 
       <div className="flex flex-col md:flex-row gap-4 h-full">
         {/* Sidebar */}
@@ -460,143 +670,135 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
                 )
               })}
            </div>
+           
+           {/* Nút bật Code Backend */}
+           <div className="p-2 border-t border-slate-100">
+               <button 
+                  onClick={() => setShowScriptHelp(true)}
+                  className="w-full py-2 bg-amber-50 text-amber-600 rounded-lg text-xs font-bold border border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"
+               >
+                   <AlertCircle className="w-3 h-3"/>
+                   Code Backend Script
+               </button>
+           </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
-           {/* Header */}
+           {/* Header Toolbar */}
            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between gap-4 bg-slate-50/50">
-              <div className="flex items-center gap-2 font-bold text-slate-800">
-                  {React.createElement(activeConfig.icon, { className: "w-5 h-5 text-blue-600" })}
-                  {activeConfig.label}
-                  <span className="ml-2 px-2 py-0.5 bg-slate-200 rounded-full text-xs font-normal text-slate-500">
-                    {data.length}
-                  </span>
+              <div className="flex items-center gap-3">
+                  <div className={`p-2 rounded-lg ${activeTabId === 'DEVICE' ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-600'}`}>
+                    {React.createElement(activeConfig.icon, { className: "w-6 h-6" })}
+                  </div>
+                  <div>
+                      <h2 className="font-bold text-slate-800 text-lg">{activeConfig.label}</h2>
+                      <div className="text-xs text-slate-500 font-medium flex items-center gap-2 mt-1">
+                          <span className="flex items-center gap-1"><Database className="w-3 h-3"/> {data.length} bản ghi</span>
+                          {!scriptUrl && (
+                             <span className="text-red-500 flex items-center gap-1 bg-red-50 px-1.5 rounded border border-red-100"><AlertTriangle className="w-3 h-3"/> Chưa kết nối Script</span>
+                          )}
+                      </div>
+                  </div>
               </div>
-              <div className="flex gap-2 w-full sm:w-auto">
+
+              <div className="flex gap-2 w-full sm:w-auto items-center">
                  <div className="relative flex-1 sm:w-64">
                     <input
                       type="text"
                       placeholder="Tìm kiếm..."
                       value={searchTerm}
                       onChange={e => setSearchTerm(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-1 focus:ring-blue-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     />
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                  </div>
-                 <button onClick={loadData} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-blue-600">
-                    <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                 
+                 <button 
+                    onClick={loadData} 
+                    className="p-2 bg-white border border-slate-200 rounded-lg hover:text-blue-600 hover:border-blue-300 transition-colors"
+                    title="Làm mới"
+                 >
+                    <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
+                 </button>
+
+                 <button 
+                    onClick={handleCreateClick}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg shadow-blue-500/20 transition-all active:scale-95 whitespace-nowrap"
+                 >
+                    <Plus className="w-5 h-5" />
+                    <span className="hidden sm:inline">Thêm mới</span>
                  </button>
               </div>
            </div>
 
            {/* Table */}
-           <div className="flex-1 overflow-auto custom-scrollbar relative scroll-smooth">
+           <div className="flex-1 overflow-auto custom-scrollbar relative scroll-smooth bg-slate-50/30">
               <table className="w-full text-left border-collapse">
-                 <thead className="bg-emerald-50 text-emerald-800 text-xs uppercase sticky top-0 z-10 shadow-sm">
+                 <thead className="bg-slate-50 text-slate-600 text-xs uppercase sticky top-0 z-10 shadow-sm font-bold tracking-wider">
                     <tr>
-                       <th className="px-4 py-3 border-b border-emerald-100 w-12 text-center">#</th>
+                       <th className="px-4 py-3 border-b border-slate-200 w-12 text-center bg-slate-50">#</th>
                        {activeConfig.columns.map((col, idx) => (
-                          <th key={idx} className={`px-4 py-3 border-b border-emerald-100 font-bold whitespace-nowrap ${col.width || ''}`}>
+                          <th key={idx} className={`px-4 py-3 border-b border-slate-200 bg-slate-50 whitespace-nowrap ${col.width || ''}`}>
                              {col.header}
                           </th>
                        ))}
-                       <th className="px-4 py-3 border-b border-emerald-100 w-20 sticky right-0 bg-emerald-50 z-20 text-center">Thao tác</th>
+                       <th className="px-4 py-3 border-b border-slate-200 w-24 text-center bg-slate-50 sticky right-0 shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]">Thao tác</th>
                     </tr>
                  </thead>
-                 <tbody className="divide-y divide-slate-100 text-sm">
-                    {/* ADD NEW ROW (Always visible at top) */}
-                    <tr className="sticky top-[41px] z-10 shadow-sm border-b-2 bg-blue-50/40 border-blue-100">
-                       <td className="px-4 py-3 text-center text-blue-500">
-                           <Plus className="w-4 h-4 mx-auto" />
-                       </td>
-                       {activeConfig.columns.map((col, idx) => (
-                          <td key={idx} className="px-2 py-2">
-                             <input 
-                                value={editingRowIndex === null ? (formData[idx] || '') : ''} // Clear if editing other row
-                                onChange={e => setFormData({...formData, [idx]: e.target.value})}
-                                placeholder={col.placeholder}
-                                className="w-full px-3 py-1.5 text-sm border border-blue-200 rounded bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-                                onKeyDown={e => e.key === 'Enter' && handleInlineSave(true)}
-                                disabled={editingRowIndex !== null}
-                             />
-                          </td>
-                       ))}
-                       <td className="px-2 py-2 sticky right-0 flex gap-1 justify-center bg-blue-50/40">
-                          <button 
-                             onClick={() => handleInlineSave(true)}
-                             disabled={isSaving || editingRowIndex !== null}
-                             className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm disabled:opacity-50"
-                             title="Thêm mới"
-                          >
-                             {isSaving && editingRowIndex === null ? <Loader2 className="w-4 h-4 animate-spin"/> : <Save className="w-4 h-4"/>}
-                          </button>
-                       </td>
-                    </tr>
-                    
-                    {/* Data Rows */}
-                    {filteredData.map((row, rIdx) => {
-                       const isEditing = editingRowIndex === row.originalIndex;
-                       return (
-                       <tr key={rIdx} className={`hover:bg-slate-50 group ${isEditing ? 'bg-orange-50' : ''}`}>
-                          <td className="px-4 py-3 text-center text-slate-400 text-xs font-mono">{rIdx + 1}</td>
-                          
-                          {activeConfig.columns.map((col, cIdx) => (
-                             <td key={cIdx} className="px-2 py-2">
-                                {isEditing ? (
-                                    <input 
-                                        value={formData[cIdx] || ''}
-                                        onChange={e => setFormData({...formData, [cIdx]: e.target.value})}
-                                        className="w-full px-2 py-1 text-sm border border-orange-300 rounded focus:ring-2 focus:ring-orange-500 outline-none bg-white"
-                                        autoFocus={cIdx === 0}
-                                    />
-                                ) : (
-                                    <div className="px-2 text-slate-700 truncate max-w-[300px]" title={row.values[cIdx]}>
-                                        {row.values[cIdx] || ''}
-                                    </div>
-                                )}
-                             </td>
-                          ))}
-                          
-                          <td className={`px-2 py-2 sticky right-0 text-center ${isEditing ? 'bg-orange-50' : 'bg-white group-hover:bg-slate-50'}`}>
-                             {isEditing ? (
-                                <div className="flex items-center justify-center gap-1">
-                                    <button 
-                                        onClick={() => handleInlineSave(false)}
-                                        className="p-1.5 text-white bg-green-500 rounded hover:bg-green-600 shadow-sm"
-                                        title="Lưu"
-                                    >
-                                        <Check className="w-4 h-4"/>
-                                    </button>
-                                    <button 
-                                        onClick={handleCancelInline}
-                                        className="p-1.5 text-slate-600 bg-slate-200 rounded hover:bg-slate-300"
-                                        title="Hủy"
-                                    >
-                                        <X className="w-4 h-4"/>
-                                    </button>
-                                </div>
-                             ) : (
-                                <button 
-                                    onClick={() => handleEditClick(row)}
-                                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                    title="Sửa dòng này"
-                                >
-                                    <Edit2 className="w-4 h-4" />
-                                </button>
-                             )}
-                          </td>
-                       </tr>
-                    )})}
-                    {filteredData.length === 0 && (
+                 <tbody className="divide-y divide-slate-100 text-sm bg-white">
+                    {filteredData.length > 0 ? (
+                        filteredData.map((row, rIdx) => (
+                           <tr key={rIdx} className="hover:bg-blue-50/50 group transition-colors">
+                              <td className="px-4 py-3 text-center text-slate-400 text-xs font-mono">{rIdx + 1}</td>
+                              
+                              {activeConfig.columns.map((col, cIdx) => (
+                                 <td key={cIdx} className="px-4 py-3 text-slate-700">
+                                     <div className="truncate max-w-[300px]" title={row.values[cIdx]}>
+                                        {row.values[cIdx] || <span className="text-slate-300 italic">-</span>}
+                                     </div>
+                                 </td>
+                              ))}
+                              
+                              <td className="px-4 py-3 text-center sticky right-0 bg-white group-hover:bg-blue-50/50 shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]">
+                                 <div className="flex items-center justify-center gap-2">
+                                     <button 
+                                        onClick={() => handleEditClick(row)}
+                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                        title="Sửa"
+                                        disabled={deletingId !== null}
+                                     >
+                                        <Edit2 className="w-4 h-4" />
+                                     </button>
+                                     <button 
+                                        onClick={() => handleDeleteClick(row)}
+                                        disabled={deletingId !== null}
+                                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors disabled:opacity-50"
+                                        title="Xóa"
+                                     >
+                                        {deletingId === row.originalIndex ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <Trash2 className="w-4 h-4" />}
+                                     </button>
+                                 </div>
+                              </td>
+                           </tr>
+                        ))
+                    ) : (
                         <tr>
-                            <td colSpan={activeConfig.columns.length + 2} className="text-center py-10 text-slate-400 italic">
-                                Chưa có dữ liệu
+                            <td colSpan={activeConfig.columns.length + 2} className="text-center py-20 text-slate-400">
+                                <div className="flex flex-col items-center gap-2">
+                                    <AlertCircle className="w-10 h-10 opacity-20" />
+                                    <p className="italic">Chưa có dữ liệu phù hợp</p>
+                                </div>
                             </td>
                         </tr>
                     )}
                  </tbody>
               </table>
+           </div>
+           
+           {/* Footer Stats */}
+           <div className="p-2 border-t border-slate-100 bg-slate-50 text-xs text-slate-400 text-center">
+                Hiển thị {filteredData.length} bản ghi
            </div>
         </div>
       </div>

@@ -414,7 +414,7 @@ export const DriveFileBrowser: React.FC<DriveFileBrowserProps> = ({ folderId, ti
                                                     {formatCurrency(summary.totalMoney)}
                                                 </span>
                                                 <span className="text-[10px] text-slate-400 font-medium">
-                                                    • {summary.totalQty} mặt hàng
+                                                    • {summary.totalQty} số lượng các mặt hàng
                                                 </span>
                                             </div>
                                         )}

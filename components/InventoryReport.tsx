@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { DeviceRow } from '../types';
-import { ArrowDownCircle, ArrowUpCircle, Box, Search, Download, Archive, AlertCircle, CheckCircle2, History, X, ChevronRight, ChevronDown } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Box, Search, Download, Archive, AlertCircle, CheckCircle2, History, X, ChevronRight, ChevronDown, DollarSign } from 'lucide-react';
 import Papa from 'papaparse';
 import { DeviceDetailModal } from './DeviceDetailModal';
 
@@ -13,19 +13,21 @@ interface InventoryReportProps {
 interface InventoryItem {
   id: string;
   deviceName: string;
+  details: Set<string>; 
   models: Set<string>;
   importCount: number;
   exportCount: number;
   stock: number;
-  history: DeviceRow[]; // Keep reference to rows for detailed view
+  importMoney: number;
+  exportMoney: number;
+  stockMoney: number;
+  history: DeviceRow[]; 
 }
 
 // Helper: Format Date dd/mm/yyyy handling Google Sheets format
 const formatDate = (input: string): string => {
   if (!input) return '';
   try {
-    // Handle Google Sheets JSON date format "Date(year, month, day)"
-    // Month is 0-indexed in this format
     if (input.includes('Date(')) {
         const parts = input.match(/\d+/g);
         if (parts && parts.length >= 3) {
@@ -33,7 +35,6 @@ const formatDate = (input: string): string => {
             return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
         }
     }
-    // Handle standard date strings
     const d = new Date(input);
     if (isNaN(d.getTime())) return input; 
     
@@ -43,15 +44,29 @@ const formatDate = (input: string): string => {
   }
 };
 
+// Helper: Format Currency
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(amount);
+};
+
+// Helper: Parse Number from Sheet
+const parseSheetNumber = (raw: string | undefined): number => {
+    if (!raw) return 0;
+    let clean = raw.toString().trim().replace(/,/g, ''); 
+    if (clean.includes('.') && !clean.includes(',')) clean = clean.replace(/\./g, '');
+    const parsed = parseFloat(clean);
+    return isNaN(parsed) ? 0 : parsed;
+};
+
 // History Modal Component
 const InventoryHistoryModal: React.FC<{ 
   item: InventoryItem, 
-  onClose: () => void,
+  onClose: () => void, 
   onSelectRow: (row: DeviceRow) => void 
 }> = ({ item, onClose, onSelectRow }) => {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
              <div className="flex items-center gap-3">
                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><History className="w-5 h-5"/></div>
@@ -63,24 +78,27 @@ const InventoryHistoryModal: React.FC<{
              <button onClick={onClose}><X className="w-5 h-5 text-slate-400 hover:text-slate-600"/></button>
          </div>
          
-         <div className="flex-1 overflow-auto p-0">
+         <div className="flex-1 overflow-auto p-0 custom-scrollbar">
              <table className="w-full text-left text-sm">
-                 <thead className="bg-slate-50 text-slate-500 font-bold sticky top-0 shadow-sm">
+                 <thead className="bg-slate-50 text-slate-500 font-bold sticky top-0 shadow-sm z-10">
                      <tr>
                          <th className="px-4 py-3">Ngày</th>
                          <th className="px-4 py-3">Số Phiếu</th>
                          <th className="px-4 py-3">Loại</th>
                          <th className="px-4 py-3 hidden sm:table-cell">Nhà cung cấp/ Khoa</th>
                          <th className="px-4 py-3 text-right">SL</th>
+                         <th className="px-4 py-3 text-right">Đơn giá</th>
+                         <th className="px-4 py-3 text-right">Thành tiền</th>
                          <th className="px-4 py-3"></th>
                      </tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100">
                      {item.history.map((row, idx) => {
                          const isImport = !row.ticketNumber.toUpperCase().startsWith('PX');
-                         // Sử dụng hàm formatDate để xử lý cột F (index 5)
                          const date = formatDate(row.fullData[5]);
-                         const qty = parseFloat(row.fullData[14]) || 1;
+                         const qty = parseSheetNumber(row.fullData[14]) || 1;
+                         const price = parseSheetNumber(row.fullData[15]) || 0;
+                         const total = parseSheetNumber(row.fullData[16]) || 0;
                          
                          return (
                              <tr key={idx} className="hover:bg-slate-50 cursor-pointer" onClick={() => onSelectRow(row)}>
@@ -93,6 +111,8 @@ const InventoryHistoryModal: React.FC<{
                                  </td>
                                  <td className="px-4 py-3 text-slate-600 max-w-[200px] truncate hidden sm:table-cell">{row.provider || row.department}</td>
                                  <td className="px-4 py-3 text-right font-bold">{qty}</td>
+                                 <td className="px-4 py-3 text-right text-xs font-mono text-slate-500">{formatCurrency(price)}</td>
+                                 <td className="px-4 py-3 text-right text-xs font-mono font-bold text-slate-700">{formatCurrency(total)}</td>
                                  <td className="px-4 py-3 text-right"><ChevronRight className="w-4 h-4 text-slate-300"/></td>
                              </tr>
                          )
@@ -126,10 +146,14 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
         inventoryMap.set(groupKey, {
           id: groupKey,
           deviceName: deviceNameRaw, 
+          details: new Set<string>(), 
           models: new Set<string>(),
           importCount: 0,
           exportCount: 0,
           stock: 0,
+          importMoney: 0,
+          exportMoney: 0,
+          stockMoney: 0,
           history: []
         });
       }
@@ -140,32 +164,35 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
       if (deviceNameRaw && deviceNameRaw.length > item.deviceName.length) {
           item.deviceName = deviceNameRaw;
       }
+      
       if (row.modelSerial && row.modelSerial !== '-' && row.modelSerial !== 'N/A') {
         item.models.add(row.modelSerial);
       }
-
-      let quantity = 0;
-      const rawQty = row.fullData[14]; 
       
-      if (rawQty) {
-          let cleanQty = rawQty.toString().trim().replace(/,/g, ''); 
-          if (cleanQty.includes('.') && !cleanQty.includes(',')) cleanQty = cleanQty.replace(/\./g, '');
-          const parsed = parseFloat(cleanQty);
-          if (!isNaN(parsed)) quantity = parsed;
+      const details = row.fullData[8];
+      if (details && details.trim() !== '' && details !== '-') {
+          item.details.add(details.trim());
       }
+
+      let quantity = parseSheetNumber(row.fullData[14]);
       if (quantity === 0 && row.deviceName) quantity = 1; 
+
+      let money = parseSheetNumber(row.fullData[16]);
 
       const ticketUpper = row.ticketNumber.trim().toUpperCase();
       if (ticketUpper.startsWith('PX')) {
         item.exportCount += quantity;
+        item.exportMoney += money;
       } else {
         item.importCount += quantity;
+        item.importMoney += money;
       }
     });
 
     return Array.from(inventoryMap.values()).map(item => ({
       ...item,
-      stock: item.importCount - item.exportCount
+      stock: item.importCount - item.exportCount,
+      stockMoney: item.importMoney - item.exportMoney
     })).sort((a, b) => a.deviceName.localeCompare(b.deviceName));
   }, [data]);
 
@@ -176,7 +203,8 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
       result = result.filter(item => 
         item.deviceName.toLowerCase().includes(lowerTerm) ||
         item.id.toLowerCase().includes(lowerTerm) ||
-        Array.from(item.models).some(m => (m as string).toLowerCase().includes(lowerTerm))
+        Array.from(item.models).some(m => (m as string).toLowerCase().includes(lowerTerm)) ||
+        Array.from(item.details).some(d => (d as string).toLowerCase().includes(lowerTerm))
       );
     }
     if (hideZeroStock) {
@@ -189,27 +217,34 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
     return filteredReport.reduce((acc, item) => ({
       totalImport: acc.totalImport + item.importCount,
       totalExport: acc.totalExport + item.exportCount,
-      totalStock: acc.totalStock + item.stock
-    }), { totalImport: 0, totalExport: 0, totalStock: 0 });
+      totalStock: acc.totalStock + item.stock,
+      totalStockValue: acc.totalStockValue + item.stockMoney
+    }), { totalImport: 0, totalExport: 0, totalStock: 0, totalStockValue: 0 });
   }, [filteredReport]);
 
   const handleExportCSV = () => {
-    const csvData = filteredReport.map((item, index) => ({
-      STT: index + 1,
-      'Mã TB': item.id !== item.deviceName ? item.id : '',
-      'Tên Thiết Bị': item.deviceName,
-      'Model/Quy cách': Array.from(item.models).join(', '),
-      'Tổng Nhập': item.importCount,
-      'Tổng Xuất': item.exportCount,
-      'Tồn Kho': item.stock
-    }));
+    const csvData = filteredReport.map((item, index) => {
+      const avgPrice = item.stock > 0 ? Math.round(item.stockMoney / item.stock) : 0;
+      return {
+        STT: index + 1,
+        'Mã TB': item.id !== item.deviceName ? item.id : '',
+        'Tên Thiết Bị': item.deviceName,
+        'Chi tiết/Quy cách': Array.from(item.details).join('; '),
+        'Model/Serial': Array.from(item.models).join('; '),
+        'Tổng Nhập (SL)': item.importCount,
+        'Tổng Xuất (SL)': item.exportCount,
+        'Tồn Kho (SL)': item.stock,
+        'Đơn giá TB': avgPrice,
+        'Giá trị Tồn': item.stockMoney
+      };
+    });
 
     const csv = Papa.unparse(csvData);
     const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `Xuat_Nhap_Ton_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`);
+    link.setAttribute('download', `Bao_Cao_Ton_Kho_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -256,35 +291,26 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
         </div>
 
         <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 relative overflow-hidden">
-           <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-emerald-50 rounded-full opacity-50"></div>
-          <div className="p-2 md:p-3 bg-emerald-50 text-emerald-600 rounded-lg z-10 shrink-0">
-            <ArrowDownCircle className="w-5 h-5 md:w-6 md:h-6" />
-          </div>
-          <div className="z-10 min-w-0">
-            <p className="text-[10px] md:text-xs text-emerald-600/80 uppercase font-bold tracking-wide">Tổng Nhập</p>
-            <p className="text-xl md:text-2xl font-bold text-emerald-700 truncate">{summary.totalImport.toLocaleString()}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 relative overflow-hidden">
-          <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-orange-50 rounded-full opacity-50"></div>
-          <div className="p-2 md:p-3 bg-orange-50 text-orange-600 rounded-lg z-10 shrink-0">
-            <ArrowUpCircle className="w-5 h-5 md:w-6 md:h-6" />
-          </div>
-          <div className="z-10 min-w-0">
-            <p className="text-[10px] md:text-xs text-orange-600/80 uppercase font-bold tracking-wide">Tổng Xuất</p>
-            <p className="text-xl md:text-2xl font-bold text-orange-700 truncate">{summary.totalExport.toLocaleString()}</p>
-          </div>
-        </div>
-
-        <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 relative overflow-hidden">
-          <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-indigo-50 rounded-full opacity-50"></div>
+           <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-indigo-50 rounded-full opacity-50"></div>
           <div className="p-2 md:p-3 bg-indigo-50 text-indigo-600 rounded-lg z-10 shrink-0">
             <Archive className="w-5 h-5 md:w-6 md:h-6" />
           </div>
           <div className="z-10 min-w-0">
-            <p className="text-[10px] md:text-xs text-indigo-600/80 uppercase font-bold tracking-wide">Tồn Kho</p>
+            <p className="text-[10px] md:text-xs text-indigo-600/80 uppercase font-bold tracking-wide">Tồn Kho (SL)</p>
             <p className="text-xl md:text-2xl font-bold text-indigo-700 truncate">{summary.totalStock.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="bg-white p-3 md:p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 relative overflow-hidden col-span-2 md:col-span-2">
+          <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-emerald-50 rounded-full opacity-50"></div>
+          <div className="p-2 md:p-3 bg-emerald-50 text-emerald-600 rounded-lg z-10 shrink-0">
+            <DollarSign className="w-5 h-5 md:w-6 md:h-6" />
+          </div>
+          <div className="z-10 min-w-0 flex-1">
+            <p className="text-[10px] md:text-xs text-emerald-600/80 uppercase font-bold tracking-wide">Tổng Giá Trị Tồn Kho</p>
+            <p className="text-xl md:text-3xl font-black text-emerald-700 truncate tracking-tight">
+                {formatCurrency(summary.totalStockValue)}
+            </p>
           </div>
         </div>
       </div>
@@ -295,7 +321,7 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
             <div className="relative flex-1 w-full">
                 <input
                   type="text"
-                  placeholder="Tìm tên, mã, model..."
+                  placeholder="Tìm tên, mã, model, chi tiết..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm"
@@ -336,41 +362,60 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
             <thead className="text-xs text-emerald-800 uppercase bg-emerald-50 sticky top-0 z-20 shadow-sm border-b border-emerald-100">
               <tr>
                 <th className="px-6 py-3 font-bold w-12 text-center">#</th>
-                <th className="px-6 py-3 font-bold">Tên Thiết Bị / Mã</th>
-                <th className="px-6 py-3 font-bold w-1/4">Model / Quy cách</th>
-                <th className="px-6 py-3 font-bold w-32 text-right text-emerald-600">Tổng Nhập</th>
-                <th className="px-6 py-3 font-bold w-32 text-right text-orange-600">Tổng Xuất</th>
-                <th className="px-6 py-3 font-bold w-32 text-right text-indigo-700 bg-indigo-50/50">Tồn Kho</th>
+                <th className="px-6 py-3 font-bold">Tên Thiết Bị / Mã - Chi tiết</th>
+                <th className="px-6 py-3 font-bold w-1/5">Model / Quy cách</th>
+                <th className="px-6 py-3 font-bold w-24 text-right">Tồn Kho</th>
+                <th className="px-6 py-3 font-bold w-32 text-right">Đơn giá TB</th>
+                <th className="px-6 py-3 font-bold w-40 text-right text-emerald-700 bg-emerald-100/30">Giá trị Tồn</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredReport.length > 0 ? (
-                filteredReport.map((item, index) => (
-                  <tr key={index} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setSelectedItem(item)}>
-                    <td className="px-6 py-3 text-center text-slate-400 text-sm">{index + 1}</td>
-                    <td className="px-6 py-3">
-                      <div className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors">{item.deviceName}</div>
-                      {item.id !== item.deviceName && (
-                          <div className="text-xs text-slate-400 font-mono mt-0.5">{item.id}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-3">
-                        <div className="flex flex-wrap gap-1">
-                            {Array.from(item.models).map((model, idx) => (
-                                <span key={idx} className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                                    {model as string}
-                                </span>
-                            ))}
-                            {item.models.size === 0 && <span className="text-slate-300 text-sm italic">-</span>}
-                        </div>
-                    </td>
-                    <td className="px-6 py-3 text-right font-mono font-medium text-emerald-600">{item.importCount.toLocaleString()}</td>
-                    <td className="px-6 py-3 text-right font-mono font-medium text-orange-600">{item.exportCount.toLocaleString()}</td>
-                    <td className={`px-6 py-3 text-right font-mono font-bold ${item.stock <= 0 ? 'text-red-500 bg-red-50/30' : 'text-indigo-700 bg-indigo-50/30'}`}>
-                      {item.stock.toLocaleString()}
-                    </td>
-                  </tr>
-                ))
+                filteredReport.map((item, index) => {
+                    const avgPrice = item.stock > 0 ? item.stockMoney / item.stock : 0;
+                    return (
+                        <tr key={index} className="hover:bg-slate-50 transition-colors cursor-pointer group" onClick={() => setSelectedItem(item)}>
+                            <td className="px-6 py-3 text-center text-slate-400 text-sm">{index + 1}</td>
+                            <td className="px-6 py-3">
+                                <div className="font-semibold text-slate-800 group-hover:text-blue-600 transition-colors text-base">
+                                    {item.deviceName}
+                                </div>
+                                
+                                <div className="text-xs mt-0.5 text-slate-500 line-clamp-2">
+                                    {item.id !== item.deviceName && (
+                                        <span className="font-mono font-bold text-slate-600 mr-1.5 bg-slate-100 px-1 rounded border border-slate-200">
+                                            {item.id}
+                                        </span>
+                                    )}
+                                    {item.details.size > 0 && (
+                                        <span className="text-slate-500">
+                                             {Array.from(item.details).join('; ')}
+                                        </span>
+                                    )}
+                                </div>
+                            </td>
+                            <td className="px-6 py-3">
+                                <div className="flex flex-wrap gap-1">
+                                    {Array.from(item.models).map((model, idx) => (
+                                        <span key={idx} className="text-xs font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
+                                            {model as string}
+                                        </span>
+                                    ))}
+                                    {item.models.size === 0 && <span className="text-slate-300 text-sm italic">-</span>}
+                                </div>
+                            </td>
+                            <td className={`px-6 py-3 text-right font-mono font-bold ${item.stock <= 0 ? 'text-red-500' : 'text-blue-600'}`}>
+                            {item.stock.toLocaleString()}
+                            </td>
+                            <td className="px-6 py-3 text-right font-mono text-sm text-slate-500">
+                                {item.stock > 0 ? formatCurrency(avgPrice) : '-'}
+                            </td>
+                            <td className="px-6 py-3 text-right font-mono font-bold text-emerald-700 bg-emerald-50/10">
+                                {formatCurrency(item.stockMoney)}
+                            </td>
+                        </tr>
+                    )
+                })
               ) : (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center">
@@ -396,14 +441,22 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
                         <div className="flex justify-between items-start mb-2">
                              <div>
                                 <h3 className="font-bold text-slate-800 text-sm line-clamp-2">{item.deviceName}</h3>
-                                {item.id !== item.deviceName && <p className="text-xs text-slate-400 font-mono">{item.id}</p>}
+                                <div className="text-xs text-slate-500 mt-1 flex items-center flex-wrap gap-1.5">
+                                     {item.id !== item.deviceName && <span className="font-mono font-bold text-slate-600 bg-slate-100 px-1 rounded">{item.id}</span>}
+                                     {item.details.size > 0 && <span className="truncate">{Array.from(item.details).join('; ')}</span>}
+                                </div>
                              </div>
-                             <span className={`px-2 py-1 rounded text-xs font-bold font-mono ${item.stock <= 0 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                                 Tồn: {item.stock}
+                             <span className={`px-2 py-1 rounded text-xs font-bold font-mono shrink-0 ml-2 ${item.stock <= 0 ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                 SL: {item.stock}
                              </span>
                         </div>
+
+                        <div className="flex justify-between items-center bg-emerald-50 p-2 rounded-lg border border-emerald-100 mb-2">
+                             <span className="text-xs text-emerald-700 font-medium">Giá trị tồn</span>
+                             <span className="text-sm font-bold text-emerald-800 font-mono">{formatCurrency(item.stockMoney)}</span>
+                        </div>
                         
-                        <div className="flex items-center gap-4 text-xs mt-3 pt-3 border-t border-slate-100">
+                        <div className="flex items-center gap-4 text-xs mt-2 pt-2 border-t border-slate-100">
                              <div className="flex items-center gap-1.5">
                                  <ArrowDownCircle className="w-3.5 h-3.5 text-emerald-500"/>
                                  <span className="text-slate-600">Nhập: <span className="font-bold">{item.importCount}</span></span>
@@ -428,9 +481,9 @@ export const InventoryReport: React.FC<InventoryReportProps> = ({ data, isLoadin
 
         </div>
         <div className="px-6 py-2 bg-slate-50 border-t border-slate-200 text-xs text-slate-500 italic flex justify-between">
-            <span className="hidden md:inline">* Số liệu tính toán dựa trên cột O (Số lượng). Phiếu PX tính là Xuất, còn lại tính là Nhập.</span>
+            <span className="hidden md:inline">* Giá trị tính dựa trên cột Thành tiền (Q). Đơn giá TB = Giá trị tồn / SL tồn.</span>
             <span className="md:hidden">* Nhấn vào thẻ để xem lịch sử.</span>
-            <span className="font-bold text-blue-600 hidden md:inline">Tip: Click vào dòng để xem lịch sử chi tiết</span>
+            <span className="font-bold text-blue-600 hidden md:inline">Tip: Click vào dòng để xem lịch sử giá</span>
         </div>
       </div>
     </div>
