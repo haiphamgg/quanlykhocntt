@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { fetchGoogleSheetData, saveToGoogleSheet } from '../services/sheetService';
-import { Database, Plus, Save, RefreshCw, Search, Loader2, List, Tag, Building2, MapPin, Globe, Box, Edit2, X, Trash2, AlertCircle, Copy, Check, Lock, AlertTriangle } from 'lucide-react';
+import { Database, Plus, Save, RefreshCw, Search, Loader2, List, Tag, Building2, MapPin, Globe, Box, Edit2, X, Trash2, AlertCircle, Copy, Check, Lock, AlertTriangle, Wand2 } from 'lucide-react';
 
 // Cấu trúc Tab
 type TabID = 'DEVICE' | 'DEPT' | 'SECTION' | 'BRAND' | 'COUNTRY' | 'PROVIDER';
@@ -29,7 +29,7 @@ const TABS: TabConfig[] = [
     padLeft: 2, 
     startRow: 4,
     columns: [
-      { key: 'code', header: 'Mã thiết bị (C)', placeholder: 'VD: MAY001', width: 'w-32' },
+      { key: 'code', header: 'Mã thiết bị (C)', placeholder: 'Tự sinh khi nhập tên...', width: 'w-32' },
       { key: 'name', header: 'Tên thiết bị (D)', placeholder: 'Nhập tên...', width: 'min-w-[200px]' },
       { key: 'detail', header: 'Chi tiết (E)', placeholder: 'Quy cách...', width: 'min-w-[150px]' },
       { key: 'unit', header: 'ĐVT (F)', placeholder: 'Cái/Bộ', width: 'w-20' },
@@ -99,11 +99,33 @@ interface MasterDataProps {
   scriptUrl?: string;
 }
 
-// --- ERROR HELP MODAL ---
+// --- HELPER: REMOVE VIETNAMESE TONES ---
+const removeVietnameseTones = (str: string) => {
+    str = str.replace(/à|á|ạ|ả|ã|â|ầ|ấ|ậ|ẩ|ẫ|ă|ằ|ắ|ặ|ẳ|ẵ/g,"a"); 
+    str = str.replace(/è|é|ẹ|ẻ|ẽ|ê|ề|ế|ệ|ể|ễ/g,"e"); 
+    str = str.replace(/ì|í|ị|ỉ|ĩ/g,"i"); 
+    str = str.replace(/ò|ó|ọ|ỏ|õ|ô|ồ|ố|ộ|ổ|ỗ|ơ|ờ|ớ|ợ|ở|ỡ/g,"o"); 
+    str = str.replace(/ù|ú|ụ|ủ|ũ|ư|ừ|ứ|ự|ử|ữ/g,"u"); 
+    str = str.replace(/ỳ|ý|ỵ|ỷ|ỹ/g,"y"); 
+    str = str.replace(/đ/g,"d");
+    str = str.replace(/À|Á|Ạ|Ả|Ã|Â|Ầ|Ấ|Ậ|Ẩ|Ẫ|Ă|Ằ|Ắ|Ặ|Ẳ|Ẵ/g, "A");
+    str = str.replace(/È|É|Ẹ|Ẻ|Ẽ|Ê|Ề|Ế|Ệ|Ể|Ễ/g, "E");
+    str = str.replace(/Ì|Í|Ị|Ỉ|Ĩ/g, "I");
+    str = str.replace(/Ò|Ó|Ọ|Ỏ|Õ|Ô|Ồ|Ố|Ộ|Ổ|Ỗ|Ơ|Ờ|Ớ|Ợ|Ở|Ỡ/g, "O");
+    str = str.replace(/Ù|Ú|Ụ|Ủ|Ũ|Ư|Ừ|Ứ|Ự|Ử|Ữ/g, "U");
+    str = str.replace(/Ỳ|Ý|Ỵ|Ỷ|Ỹ/g, "Y");
+    str = str.replace(/Đ/g, "D");
+    // Some system encode vietnamese combining accent as individual utf-8 characters
+    str = str.replace(/\u0300|\u0301|\u0303|\u0309|\u0323/g, ""); // 
+    str = str.replace(/\u02C6|\u0306|\u031B/g, ""); // 
+    return str;
+}
+
+// --- ERROR HELP MODAL (UPDATED SCRIPT) ---
 const ScriptHelpModal = ({ onClose }: { onClose: () => void }) => {
     const [copied, setCopied] = useState(false);
     
-    // Updated code snippet: Added delete_master_item logic
+    // UPDATED SCRIPT: getLastRowWithData implemented correctly
     const codeSnippet = `
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -121,9 +143,13 @@ function doPost(e) {
       
       var rows = json.rows; // Array[][]
       if (rows && rows.length > 0) {
-        var lastRow = sheet.getLastRow();
-        var startSTT = lastRow > 2 ? lastRow - 2 : 0;
-        if (startSTT < 0) startSTT = 0;
+        var lastRow = getLastRowWithData(sheet, 1); // Check cột A (STT) để tìm dòng cuối
+        var startSTT = 0;
+        
+        if (lastRow > 2) {
+           var lastSTTVal = sheet.getRange(lastRow, 1).getValue();
+           if (!isNaN(parseInt(lastSTTVal))) startSTT = parseInt(lastSTTVal);
+        }
 
         for (var i = 0; i < rows.length; i++) {
           rows[i][0] = startSTT + i + 1; // Cột A: STT
@@ -138,7 +164,8 @@ function doPost(e) {
           while(rows[i].length < 19) { rows[i].push(""); }
           rows[i][18] = qrInfo;
         }
-
+        
+        // Ghi nối tiếp ngay sau dòng dữ liệu cuối cùng
         sheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
         return responseJSON({status: 'success', message: 'Đã tạo ' + rows.length + ' dòng phiếu.'});
       }
@@ -148,11 +175,19 @@ function doPost(e) {
     else if (action === 'add_master_device') {
        var sheet = ss.getSheetByName('DANHMUC');
        if (!sheet) sheet = ss.insertSheet('DANHMUC');
-       sheet.appendRow(json.row);
+       
+       // Cột C (Index 3) là Mã thiết bị. Tìm dòng cuối dựa trên cột C.
+       var lastRow = getLastRowWithData(sheet, 3); 
+       
+       // Ghi vào dòng tiếp theo (lastRow + 1)
+       // json.row bao gồm padding cho cột A,B nên ghi từ cột 1
+       sheet.getRange(lastRow + 1, 1, 1, json.row.length).setValues([json.row]);
+       
        return responseJSON({status: 'success', message: 'Đã thêm thiết bị mới.'});
     }
     else if (action === 'update_master_device') {
        var sheet = ss.getSheetByName('DANHMUC');
+       // rowIndex là dòng vật lý (1-based)
        sheet.getRange(json.rowIndex, 1, 1, json.row.length).setValues([json.row]);
        return responseJSON({status: 'success', message: 'Cập nhật thiết bị thành công'});
     }
@@ -161,14 +196,15 @@ function doPost(e) {
     else if (action === 'add_master_dmdc') {
        var sheet = ss.getSheetByName('DMDC');
        if (!sheet) sheet = ss.insertSheet('DMDC');
-       var colIndex = json.colIndex;
+       
+       var colIndex = json.colIndex; // 0=A, 1=B...
        var value = json.value;
        
        if (colIndex !== undefined && value) {
-          var colLetter = String.fromCharCode(65 + colIndex); 
-          var lastRowInCol = getLastRowSpecial(sheet, colLetter);
+          // Tìm dòng cuối của RIÊNG cột đó
+          var lastRowInCol = getLastRowWithData(sheet, colIndex + 1);
           sheet.getRange(lastRowInCol + 1, colIndex + 1).setValue(value);
-          return responseJSON({status: 'success', message: 'Đã thêm vào cột ' + colLetter});
+          return responseJSON({status: 'success', message: 'Đã thêm vào danh mục.'});
        }
        return responseJSON({status: 'error', message: 'Thiếu colIndex hoặc value'});
     }
@@ -182,11 +218,12 @@ function doPost(e) {
     else if (action === 'delete_master_item') {
        var sheetName = json.sheetName;
        var sheet = ss.getSheetByName(sheetName);
+       
        if (sheetName === 'DANHMUC') {
-         // Xóa cả dòng đối với thiết bị
+         // Xóa cả dòng (vì thiết bị nằm trên 1 dòng)
          sheet.deleteRow(json.rowIndex);
        } else if (sheetName === 'DMDC') {
-         // Xóa ô và đẩy dữ liệu lên đối với danh mục cột
+         // Xóa ô và đẩy dữ liệu lên (vì các cột độc lập)
          var range = sheet.getRange(json.rowIndex, json.colIndex + 1);
          range.deleteCells(SpreadsheetApp.Dimension.ROWS);
        }
@@ -207,16 +244,23 @@ function responseJSON(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function getLastRowSpecial(sheet, column) {
-  var lastRow = sheet.getLastRow();
-  var range = sheet.getRange(column + "1:" + column + lastRow);
-  var values = range.getValues();
+// Hàm tìm dòng cuối cùng có dữ liệu trong một cột cụ thể
+// colIndex: 1 = A, 2 = B, ...
+function getLastRowWithData(sheet, colIndex) {
+  var lastRow = sheet.getLastRow(); // Lấy dòng cuối có format/content bất kỳ
+  if (lastRow === 0) return 0;
+  
+  // Lấy toàn bộ dữ liệu cột đó để quét ngược
+  var range = sheet.getRange(1, colIndex, lastRow);
+  var values = range.getValues(); // Mảng 2 chiều [[val], [val], ...]
+  
+  // Quét từ dưới lên để tìm ô có dữ liệu thực sự
   for (var i = values.length - 1; i >= 0; i--) {
-    if (values[i][0] !== "" && values[i][0] !== null) {
-      return i + 1;
+    if (values[i][0] !== "" && values[i][0] != null) {
+      return i + 1; // Return row index (1-based)
     }
   }
-  return 0;
+  return 0; // Nếu cột trống trơn
 }
 `;
 
@@ -231,15 +275,19 @@ function getLastRowSpecial(sheet, column) {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
                 <div className="p-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center shrink-0">
                     <h3 className="font-bold text-amber-700 flex items-center gap-2">
-                        <AlertCircle className="w-5 h-5"/> Cần Cập Nhật Google Apps Script (Thêm tính năng Xóa)
+                        <AlertCircle className="w-5 h-5"/> Cần Cập Nhật Google Apps Script
                     </h3>
                     <button onClick={onClose}><X className="w-5 h-5 text-amber-500 hover:text-amber-700"/></button>
                 </div>
                 <div className="p-6 overflow-y-auto custom-scrollbar">
-                    <p className="text-sm text-slate-700 mb-4 leading-relaxed">
-                        Bạn vừa yêu cầu thêm tính năng <b>Xóa</b>. Vui lòng thay thế lại toàn bộ hàm <code>doPost</code> trong file <b>Code.gs</b> để hệ thống hiểu lệnh xóa mới.
-                        <br/><br/>
-                        <b>QUAN TRỌNG:</b> Sau khi lưu, hãy nhấn <b>Deploy (Triển khai) {'>'} New Deployment (Bài triển khai mới)</b>. Nếu không làm bước này, lệnh xóa sẽ không hoạt động.
+                    <p className="text-sm text-slate-700 mb-4 leading-relaxed bg-amber-50 p-3 rounded border border-amber-100">
+                        <b>Cập nhật mới (Bắt buộc):</b> Code này sửa lỗi chèn dòng (nối đuôi chính xác) và sửa lỗi xóa.
+                        <br/>
+                        1. Copy code bên dưới.
+                        <br/>
+                        2. Dán đè vào file <b>Code.gs</b> trong Apps Script.
+                        <br/>
+                        3. Nhấn <b>Deploy</b> {'>'} <b>New Deployment</b>.
                     </p>
                     <div className="relative group">
                         <pre className="bg-slate-900 text-green-400 p-4 rounded-lg text-xs font-mono overflow-x-auto whitespace-pre-wrap border border-slate-700 shadow-inner h-96">
@@ -274,20 +322,60 @@ interface MasterModalProps {
     onSave: (data: string[]) => void;
     isSaving: boolean;
     dropdowns: { units: string[], brands: string[], countries: string[] };
+    existingCodes: string[]; // Pass existing codes to check duplicates
 }
 
-const MasterModal: React.FC<MasterModalProps> = ({ isOpen, mode, tabConfig, initialData, onClose, onSave, isSaving, dropdowns }) => {
+const MasterModal: React.FC<MasterModalProps> = ({ isOpen, mode, tabConfig, initialData, onClose, onSave, isSaving, dropdowns, existingCodes }) => {
     const [formValues, setFormValues] = useState<string[]>([]);
 
     useEffect(() => {
         if (isOpen) {
-            if (mode === 'edit' && initialData) {
+            if (initialData) {
                 setFormValues(initialData);
             } else {
                 setFormValues(new Array(tabConfig.columns.length).fill(''));
             }
         }
     }, [isOpen, mode, initialData, tabConfig]);
+
+    // SMART AUTO-GENERATE CODE LOGIC
+    // Chạy mỗi khi trường "Tên thiết bị" (index 1) thay đổi
+    useEffect(() => {
+        if (mode === 'create' && tabConfig.id === 'DEVICE' && formValues[1]) {
+            const name = formValues[1];
+            // 1. Remove Accents & Spaces, To Upper
+            // "Máy Bơm" -> "May Bom" -> "MAYBOM"
+            const cleanName = removeVietnameseTones(name).replace(/\s+/g, '').toUpperCase();
+            
+            // 2. Take 4 chars
+            const prefix = cleanName.length >= 4 ? cleanName.substring(0, 4) : cleanName.padEnd(4, 'X');
+            
+            // 3. Find max number for this prefix
+            let maxNum = 0;
+            const regex = new RegExp(`^${prefix}(\\d+)$`); // Matches PREFIX + digits
+
+            existingCodes.forEach(code => {
+                const match = code.match(regex);
+                if (match) {
+                    const num = parseInt(match[1], 10);
+                    if (!isNaN(num) && num > maxNum) maxNum = num;
+                }
+            });
+
+            // 4. Generate new code: PREFIX + 0001 (next num)
+            const nextNum = maxNum + 1;
+            const newCode = `${prefix}${String(nextNum).padStart(4, '0')}`;
+
+            // Update formValues ONLY if the code field (index 0) is not manually edited (or empty)
+            setFormValues(prev => {
+                const newVals = [...prev];
+                // Chỉ cập nhật nếu user chưa nhập gì vào ô Mã hoặc ô mã đang trống
+                // (Thực tế nên luôn update để support user nhập tên)
+                newVals[0] = newCode;
+                return newVals;
+            });
+        }
+    }, [formValues[1], mode, tabConfig.id, existingCodes]);
 
     if (!isOpen) return null;
 
@@ -328,12 +416,14 @@ const MasterModal: React.FC<MasterModalProps> = ({ isOpen, mode, tabConfig, init
                             if (col.key === 'country') listId = 'dl-countries-modal';
 
                             // LOGIC: Disable code input if in Edit mode
-                            const isLocked = mode === 'edit' && col.key === 'code';
+                            const isCodeField = col.key === 'code';
+                            const isLocked = mode === 'edit' && isCodeField;
 
                             return (
                                 <div key={idx} className={isFullWidth ? 'col-span-2' : 'col-span-1'}>
                                     <label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between mb-1.5">
                                         <span>{col.header} {col.key === 'name' && <span className="text-red-500">*</span>}</span>
+                                        {isCodeField && mode === 'create' && <span className="text-[10px] text-blue-500 font-normal flex items-center gap-1"><Wand2 className="w-3 h-3"/> Tự sinh từ Tên</span>}
                                         {isLocked && <Lock className="w-3 h-3 text-slate-400" />}
                                     </label>
                                     <input 
@@ -349,7 +439,8 @@ const MasterModal: React.FC<MasterModalProps> = ({ isOpen, mode, tabConfig, init
                                         }`}
                                         placeholder={col.placeholder}
                                         list={listId}
-                                        autoFocus={idx === 0 && !isLocked}
+                                        // Auto focus vào tên nếu là create và field là tên
+                                        autoFocus={idx === (tabConfig.id === 'DEVICE' ? 1 : 0) && !isLocked}
                                         title={isLocked ? "Không thể sửa mã thiết bị để đảm bảo tính nhất quán" : ""}
                                     />
                                     {listId && (
@@ -395,6 +486,7 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<RowData | null>(null);
+  const [initialModalValues, setInitialModalValues] = useState<string[] | undefined>(undefined);
   
   // Error Help
   const [showScriptHelp, setShowScriptHelp] = useState(false);
@@ -463,12 +555,14 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
   const handleCreateClick = () => {
       setModalMode('create');
       setEditingRow(null);
+      setInitialModalValues(undefined);
       setIsModalOpen(true);
   };
 
   const handleEditClick = (row: RowData) => {
       setModalMode('edit');
       setEditingRow(row);
+      setInitialModalValues(row.values);
       setIsModalOpen(true);
   };
 
@@ -637,11 +731,12 @@ export const MasterData: React.FC<MasterDataProps> = ({ scriptUrl }) => {
           isOpen={isModalOpen}
           mode={modalMode}
           tabConfig={activeConfig}
-          initialData={editingRow?.values}
+          initialData={initialModalValues}
           onClose={() => setIsModalOpen(false)}
           onSave={handleSaveData}
           isSaving={isSaving}
           dropdowns={dropdowns}
+          existingCodes={data.map(d => d.values[0])} // Pass existing codes for duplicate check
       />
 
       <div className="flex flex-col md:flex-row gap-4 h-full">
